@@ -1,20 +1,25 @@
 # app.py
 """LTX 2.3 All-in-One — Gradio entry point."""
+
 from __future__ import annotations
 
 import os
 import pathlib
 import sys
+import time
+from typing import Any
 
 import gradio as gr
 
+import backend as backend_module
 import modes
 import ui
-
+import workflow as wf_module
 
 # ---------------------------------------------------------------------------
 # Bootstrap — runs once on cold start.
 # ---------------------------------------------------------------------------
+
 
 def _on_spaces() -> bool:
     return bool(os.environ.get("SPACES_ZERO_GPU"))
@@ -39,6 +44,7 @@ CUSTOM_NODES_PINNED: list[tuple[str, str]] = [
 
 def _git_clone(url: str, dst: pathlib.Path, ref: str) -> None:
     import subprocess
+
     subprocess.check_call(["git", "clone", "--depth", "1", "--branch", ref, url, str(dst)])
 
 
@@ -54,6 +60,7 @@ def _bootstrap() -> None:
             _git_clone(node_url, comfy_dir / "custom_nodes" / name, ref=node_ref)
         # Install custom node deps
         import subprocess
+
         for cn in (comfy_dir / "custom_nodes").iterdir():
             req = cn / "requirements.txt"
             if req.exists():
@@ -106,7 +113,7 @@ def build_app() -> gr.Blocks:
 
 def _render_sidebar() -> None:
     gr.Markdown("### Modes")
-    for name, mode in modes.MODE_REGISTRY.items():
+    for mode in modes.MODE_REGISTRY.values():
         gr.Markdown(f"- {mode.icon} {mode.label}")
     gr.Markdown("---\n### Models")
     gr.Button("Unload all models", variant="secondary")
@@ -115,7 +122,7 @@ def _render_sidebar() -> None:
 def _render_mode_panels() -> dict[str, dict]:
     """Render one form per mode. Returns the component handles keyed by mode."""
     handles: dict[str, dict] = {}
-    with gr.Tabs() as tabs:
+    with gr.Tabs():
         for name, mode in modes.MODE_REGISTRY.items():
             with gr.Tab(label=f"{mode.icon} {mode.label}"):
                 handles[name] = _render_one_mode(name)
@@ -124,12 +131,13 @@ def _render_mode_panels() -> dict[str, dict]:
 
 def _render_one_mode(name: str) -> dict:
     """Render a per-mode form. Returns component handles for the generate handler."""
-    mode = modes.MODE_REGISTRY[name]
     handles: dict = {"mode": name}
 
     with gr.Row():
         with gr.Column(scale=2):
-            handles["prompt"] = gr.Textbox(label="Prompt", lines=4, placeholder="Describe the shot...")
+            handles["prompt"] = gr.Textbox(
+                label="Prompt", lines=4, placeholder="Describe the shot..."
+            )
 
             # Mode-specific media inputs
             if name == "i2v":
@@ -168,12 +176,6 @@ def _render_one_mode(name: str) -> dict:
     return handles
 
 
-import time
-from typing import Any
-
-import workflow as wf_module
-import backend as backend_module
-
 _BACKEND: backend_module.ComfyUILibraryBackend | None = None
 
 
@@ -202,10 +204,22 @@ async def _on_generate(mode_name: str, **inputs: Any):
         "fps": int(inputs.get("fps", 24)),
         "seed": int(inputs.get("seed", 42)),
     }
-    for k in ("image", "audio", "first_frame", "last_frame", "input_video",
-              "camera_lora", "camera_strength",
-              "detailer_on", "detailer_strength",
-              "ic_lora", "ic_strength", "pose_on", "audio_cfg", "image_strength"):
+    for k in (
+        "image",
+        "audio",
+        "first_frame",
+        "last_frame",
+        "input_video",
+        "camera_lora",
+        "camera_strength",
+        "detailer_on",
+        "detailer_strength",
+        "ic_lora",
+        "ic_strength",
+        "pose_on",
+        "audio_cfg",
+        "image_strength",
+    ):
         if k in inputs:
             params[k] = inputs[k]
 
@@ -227,7 +241,8 @@ async def _on_generate(mode_name: str, **inputs: Any):
                 stage_label=f"Downloading {event.filename}",
                 step=int(event.mb_done),
                 total_steps=int(max(event.mb_total, 1)),
-                elapsed_s=elapsed, eta_s=0,
+                elapsed_s=elapsed,
+                eta_s=0,
             )
             yield status, gr.update()
         elif isinstance(event, backend_module.ProgressEvent):
@@ -242,7 +257,8 @@ async def _on_generate(mode_name: str, **inputs: Any):
                 stage_label=stage.label,
                 step=event.step,
                 total_steps=event.total_steps,
-                elapsed_s=elapsed, eta_s=eta,
+                elapsed_s=elapsed,
+                eta_s=eta,
             )
             yield status, gr.update()
         elif isinstance(event, backend_module.OutputEvent):
@@ -251,8 +267,8 @@ async def _on_generate(mode_name: str, **inputs: Any):
             error_html = (
                 f'<div class="status-card status-error">'
                 f'  <div class="status-row"><span class="status-stage">Error · {event.category}</span></div>'
-                f'  <div>{event.message}</div>'
-                f'</div>'
+                f"  <div>{event.message}</div>"
+                f"</div>"
             )
             yield error_html, gr.update()
 
@@ -292,10 +308,14 @@ def _collect_inputs_for_mode(mode_name: str, h: dict) -> list:
     elif mode_name == "style":
         base.append(h["input_video"])
     base.append(h["negative_prompt"])
-    base.extend([
-        h["lora"].camera_lora, h["lora"].camera_strength,
-        h["lora"].detailer_on, h["lora"].detailer_strength,
-    ])
+    base.extend(
+        [
+            h["lora"].camera_lora,
+            h["lora"].camera_strength,
+            h["lora"].detailer_on,
+            h["lora"].detailer_strength,
+        ]
+    )
     if h["lora"].ic_lora is not None:
         base.extend([h["lora"].ic_lora, h["lora"].ic_strength])
     if h["lora"].pose_on is not None:
@@ -307,7 +327,7 @@ def _make_handler(mode_name: str, h: dict):
     keys = _input_keys_for_mode(mode_name, h)
 
     async def handler(*values):
-        kwargs = dict(zip(keys, values))
+        kwargs = dict(zip(keys, values, strict=False))
         async for output in _on_generate(mode_name, **kwargs):
             yield output
 

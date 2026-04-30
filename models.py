@@ -3,6 +3,7 @@
 Lookups are by filename only — the same filename in two different repos is not
 supported. If that ever happens we'll qualify by ComfyUI loader-type.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,12 +26,8 @@ class ModelEntry:
 
 MODEL_REGISTRY: dict[str, ModelEntry] = {
     # Main LTX 2.3 transformer + LoRAs + upscalers
-    "ltx-2.3-22b-distilled.safetensors": ModelEntry(
-        "Lightricks/LTX-2.3", comfy_type="checkpoints"
-    ),
-    "ltx-2.3-22b-dev.safetensors": ModelEntry(
-        "Lightricks/LTX-2.3", comfy_type="checkpoints"
-    ),
+    "ltx-2.3-22b-distilled.safetensors": ModelEntry("Lightricks/LTX-2.3", comfy_type="checkpoints"),
+    "ltx-2.3-22b-dev.safetensors": ModelEntry("Lightricks/LTX-2.3", comfy_type="checkpoints"),
     "ltx-2.3-spatial-upscaler-x2-1.0.safetensors": ModelEntry(
         "Lightricks/LTX-2.3", comfy_type="upscale_models"
     ),
@@ -62,12 +59,8 @@ MODEL_REGISTRY: dict[str, ModelEntry] = {
         subfolder="gemma-3-12b-it",
     ),
     # Kijai's LTX 2.3 ComfyUI assets
-    "LTX23_video_vae_bf16.safetensors": ModelEntry(
-        "Kijai/LTX2.3_comfy", comfy_type="vae"
-    ),
-    "LTX23_audio_vae_bf16.safetensors": ModelEntry(
-        "Kijai/LTX2.3_comfy", comfy_type="vae"
-    ),
+    "LTX23_video_vae_bf16.safetensors": ModelEntry("Kijai/LTX2.3_comfy", comfy_type="vae"),
+    "LTX23_audio_vae_bf16.safetensors": ModelEntry("Kijai/LTX2.3_comfy", comfy_type="vae"),
     "ltx-2.3_text_projection_bf16.safetensors": ModelEntry(
         "Kijai/LTX2.3_comfy", comfy_type="text_encoders"
     ),
@@ -133,8 +126,10 @@ def walk_workflow_for_models(workflow: dict) -> set[str]:
         widgets = node.get("widgets_values") or []
         for value in _flatten_widget_values(widgets):
             if isinstance(value, str) and (
-                value.endswith(".safetensors") or value.endswith(".gguf")
-                or value == "tokenizer.model" or value.endswith(".json")
+                value.endswith(".safetensors")
+                or value.endswith(".gguf")
+                or value == "tokenizer.model"
+                or value.endswith(".json")
             ):
                 needed.add(value)
     return needed
@@ -246,6 +241,7 @@ def ensure_models(filenames: set[str]) -> Iterator[DownloadEvent]:
 def ensure_models_for_mode(mode: str) -> Iterator[DownloadEvent]:
     """Convenience: walk a mode's workflow and ensure all referenced models exist."""
     import workflow as workflow_module  # local import to avoid cycle at import time
+
     wf = workflow_module.load_template(mode)
     needed = walk_workflow_for_models(wf)
     yield from ensure_models(needed)

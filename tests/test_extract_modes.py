@@ -1,4 +1,5 @@
 """Tests for the workflow-mode extractor."""
+
 import json
 import subprocess
 import sys

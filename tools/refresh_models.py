@@ -1,4 +1,5 @@
 """Materialize all LTX 2.3 model files for every mode by walking each template."""
+
 from __future__ import annotations
 
 import pathlib

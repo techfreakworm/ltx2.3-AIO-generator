@@ -1,6 +1,9 @@
 # ui.py
 """Reusable Gradio components shared across modes."""
+
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 import gradio as gr
 
@@ -48,11 +51,11 @@ def render_status(
         f'  <div class="status-row">'
         f'    <span class="status-stage">Stage {stage_index} · {stage_label}</span>'
         f'    <span class="status-meta">Step {step}/{total_steps} · '
-        f'      {_fmt_secs(elapsed_s)} elapsed · ~{_fmt_secs(eta_s)} remaining</span>'
-        f'  </div>'
+        f"      {_fmt_secs(elapsed_s)} elapsed · ~{_fmt_secs(eta_s)} remaining</span>"
+        f"  </div>"
         f'  <div class="status-bar"><div class="status-fill" style="width:{pct}%"></div></div>'
         f'  <div class="status-mem">{memory_text}</div>'
-        f'</div>'
+        f"</div>"
     )
 
 
@@ -63,12 +66,15 @@ def _fmt_secs(secs: float) -> str:
     return f"{secs // 60}m {secs % 60}s"
 
 
-from dataclasses import dataclass
-
-
 CAMERA_LORAS: list[str] = [
-    "none", "static", "dolly-in", "dolly-out", "dolly-left", "dolly-right",
-    "jib-up", "jib-down",
+    "none",
+    "static",
+    "dolly-in",
+    "dolly-out",
+    "dolly-left",
+    "dolly-right",
+    "jib-up",
+    "jib-down",
 ]
 
 IC_LORAS_BY_MODE: dict[str, list[str]] = {
@@ -101,19 +107,29 @@ def lora_chrome(mode: str) -> LoRAComponents:
     with gr.Group():
         gr.Markdown("**📷 Camera Movement**")
         camera_lora = gr.Dropdown(
-            choices=CAMERA_LORAS, value="none", label="Camera",
+            choices=CAMERA_LORAS,
+            value="none",
+            label="Camera",
             info="Mutually exclusive — pick one camera direction or none.",
         )
         camera_strength = gr.Slider(
-            minimum=0.0, maximum=1.5, value=0.8, step=0.05,
-            label="Camera strength", visible=True,
+            minimum=0.0,
+            maximum=1.5,
+            value=0.8,
+            step=0.05,
+            label="Camera strength",
+            visible=True,
         )
 
     with gr.Group():
         gr.Markdown("**✨ Detailer**")
         detailer_on = gr.Checkbox(label="Apply IC-LoRA-Detailer", value=False)
         detailer_strength = gr.Slider(
-            minimum=0.0, maximum=1.0, value=0.5, step=0.05, label="Detailer strength",
+            minimum=0.0,
+            maximum=1.0,
+            value=0.5,
+            step=0.05,
+            label="Detailer strength",
         )
 
     ic_lora = ic_strength = pose_on = None
@@ -127,7 +143,11 @@ def lora_chrome(mode: str) -> LoRAComponents:
                 label="IC-LoRA",
             )
             ic_strength = gr.Slider(
-                minimum=0.0, maximum=1.0, value=0.5, step=0.05, label="IC strength",
+                minimum=0.0,
+                maximum=1.0,
+                value=0.5,
+                step=0.05,
+                label="IC strength",
             )
 
     if mode in ("i2v", "lipsync"):

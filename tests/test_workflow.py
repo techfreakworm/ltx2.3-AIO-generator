@@ -1,4 +1,5 @@
 """Unit tests for workflow.py — pure functions over JSON dicts."""
+
 import pytest
 
 import workflow

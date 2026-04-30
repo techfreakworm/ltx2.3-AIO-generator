@@ -1,4 +1,5 @@
 """Unit tests for modes.py — MODE_REGISTRY and parameterize_fn correctness."""
+
 import pytest
 
 import modes
@@ -23,7 +24,7 @@ def test_t2v_parameterize_produces_valid_patches(canonical_inputs):
     patches = mode.parameterize_fn(inputs)
 
     # All patches must be (node_id: int, widget_index: int, value: Any)
-    for node_id, widget_index, value in patches:
+    for node_id, widget_index, _value in patches:
         assert isinstance(node_id, int)
         assert isinstance(widget_index, int)
 
@@ -88,7 +89,12 @@ def test_style_parameterize_passes_input_video(canonical_inputs):
 def test_mode_registry_has_all_six_keys():
     """All six modes are in the registry now."""
     assert set(modes.MODE_REGISTRY.keys()) == {
-        "t2v", "a2v", "i2v", "lipsync", "keyframe", "style",
+        "t2v",
+        "a2v",
+        "i2v",
+        "lipsync",
+        "keyframe",
+        "style",
     }
 
 

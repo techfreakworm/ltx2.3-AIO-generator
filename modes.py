@@ -14,6 +14,7 @@ backend.py.
 Tasks 11 (T2V + I2V) and 12 (A2V + Lipsync + Keyframe + Style) populate
 MODE_REGISTRY. This task only sets up the dataclass and the empty container.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -64,12 +65,12 @@ MODE_REGISTRY: dict[str, Mode] = {}
 # in models.py once camera-LoRA selection lands. Deferred for now.
 # ---------------------------------------------------------------------------
 
-T2V_NODE_PROMPT = 5536            # CLIPTextEncode positive — wv[0] = prompt
-T2V_NODE_NEG_PROMPT = 5537        # CLIPTextEncode negative — wv[0] = negative prompt
-T2V_NODE_WIDTH = 5383             # INTConstant "Width" — wv[0]
-T2V_NODE_HEIGHT = 5382            # INTConstant "Height" — wv[0]
-T2V_NODE_FPS = 5445               # INTConstant "FPS" — wv[0]
-T2V_NODE_CLIP_LENGTH = 196        # mxSlider "Clip Length ( in seconds )" — wv[0]
+T2V_NODE_PROMPT = 5536  # CLIPTextEncode positive — wv[0] = prompt
+T2V_NODE_NEG_PROMPT = 5537  # CLIPTextEncode negative — wv[0] = negative prompt
+T2V_NODE_WIDTH = 5383  # INTConstant "Width" — wv[0]
+T2V_NODE_HEIGHT = 5382  # INTConstant "Height" — wv[0]
+T2V_NODE_FPS = 5445  # INTConstant "FPS" — wv[0]
+T2V_NODE_CLIP_LENGTH = 196  # mxSlider "Clip Length ( in seconds )" — wv[0]
 
 I2V_NODE_PROMPT = 5536
 I2V_NODE_NEG_PROMPT = 5537
@@ -77,7 +78,7 @@ I2V_NODE_WIDTH = 5383
 I2V_NODE_HEIGHT = 5382
 I2V_NODE_FPS = 5445
 I2V_NODE_CLIP_LENGTH = 196
-I2V_NODE_IMAGE = 149              # LoadImage "Load Image1" — wv[0] = filename
+I2V_NODE_IMAGE = 149  # LoadImage "Load Image1" — wv[0] = filename
 
 # Mode-specific media nodes — captured from workflows/{a2v,lipsync,keyframe,style}.json
 # on 2026-04-30. All four templates contain the same node ids for these inputs (the
@@ -97,27 +98,27 @@ A2V_NODE_WIDTH = 5383
 A2V_NODE_HEIGHT = 5382
 A2V_NODE_FPS = 5445
 A2V_NODE_CLIP_LENGTH = 196
-A2V_NODE_AUDIO = 5400             # VHS_LoadAudioUpload — dict wv keyed by "audio"
+A2V_NODE_AUDIO = 5400  # VHS_LoadAudioUpload — dict wv keyed by "audio"
 
 LIPSYNC_NODE_PROMPT = 5536
 LIPSYNC_NODE_NEG_PROMPT = 5537
 LIPSYNC_NODE_FPS = 5445
 LIPSYNC_NODE_CLIP_LENGTH = 196
-LIPSYNC_NODE_IMAGE = 149          # LoadImage "Load Image1" — wv[0] = filename
-LIPSYNC_NODE_AUDIO = 5400         # VHS_LoadAudioUpload — dict wv keyed by "audio"
+LIPSYNC_NODE_IMAGE = 149  # LoadImage "Load Image1" — wv[0] = filename
+LIPSYNC_NODE_AUDIO = 5400  # VHS_LoadAudioUpload — dict wv keyed by "audio"
 
 KEYFRAME_NODE_PROMPT = 5536
 KEYFRAME_NODE_NEG_PROMPT = 5537
 KEYFRAME_NODE_FPS = 5445
 KEYFRAME_NODE_CLIP_LENGTH = 196
-KEYFRAME_NODE_FIRST_FRAME = 149   # LoadImage "Load Image1" — wv[0] = filename
-KEYFRAME_NODE_LAST_FRAME = 5437   # LoadImage "Load Image2" — wv[0] = filename
+KEYFRAME_NODE_FIRST_FRAME = 149  # LoadImage "Load Image1" — wv[0] = filename
+KEYFRAME_NODE_LAST_FRAME = 5437  # LoadImage "Load Image2" — wv[0] = filename
 
 STYLE_NODE_PROMPT = 5536
 STYLE_NODE_NEG_PROMPT = 5537
 STYLE_NODE_FPS = 5445
 STYLE_NODE_CLIP_LENGTH = 196
-STYLE_NODE_INPUT_VIDEO = 5444     # VHS_LoadVideo — dict wv keyed by "video"
+STYLE_NODE_INPUT_VIDEO = 5444  # VHS_LoadVideo — dict wv keyed by "video"
 
 
 def _frames_to_seconds(frames: int, fps: int) -> int:

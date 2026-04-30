@@ -12,6 +12,7 @@ Group title -> output filename mapping:
     05 -> keyframe.json
     06 -> style.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -94,7 +95,7 @@ def extract_mode(master: dict, mode_prefix: str) -> dict:
         "id": f"ltx23-aio-{mode_prefix}",
         "revision": 0,
         "last_node_id": max(kept_ids, default=0),
-        "last_link_id": max((l[0] for l in links), default=0),
+        "last_link_id": max((link[0] for link in links), default=0),
         "nodes": nodes,
         "links": links,
         "groups": groups,

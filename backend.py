@@ -3,6 +3,7 @@
 Single-process, single-implementation. The @spaces.GPU decorator is the only
 divergence between local and HF Spaces deployment.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,7 @@ import threading
 import traceback as tb_mod
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import models
 
@@ -36,7 +37,7 @@ class ProgressEvent:
 @dataclass
 class OutputEvent:
     video_path: str
-    audio_path: Optional[str] = None
+    audio_path: str | None = None
     meta: dict = field(default_factory=dict)
 
 
@@ -44,7 +45,7 @@ class OutputEvent:
 class ErrorEvent:
     category: str  # "oom" | "zerogpu_timeout" | "execution" | "interrupt" | "download"
     message: str
-    stage: Optional[int] = None
+    stage: int | None = None
     traceback: str = ""
 
 
@@ -113,13 +114,18 @@ class ComfyUILibraryBackend:
             asyncio.run_coroutine_threadsafe(queue.put(event), loop)
 
         def _hook(value: int, total: int, _preview=None) -> None:
-            _push(ProgressEvent(
-                stage=0, stage_label="diffusion",
-                step=int(value), total_steps=int(total),
-            ))
+            _push(
+                ProgressEvent(
+                    stage=0,
+                    stage_label="diffusion",
+                    step=int(value),
+                    total_steps=int(total),
+                )
+            )
 
         def _worker() -> None:
             import comfy.utils
+
             saved_hook = getattr(comfy.utils, "PROGRESS_BAR_HOOK", None)
             try:
                 # Use the public setter; it writes the same global the
@@ -137,11 +143,13 @@ class ComfyUILibraryBackend:
                 video_path = _first_video_path(outputs) or ""
                 _push(OutputEvent(video_path=video_path))
             except Exception as exc:
-                _push(ErrorEvent(
-                    category=_classify(exc),
-                    message=str(exc),
-                    traceback=tb_mod.format_exc(),
-                ))
+                _push(
+                    ErrorEvent(
+                        category=_classify(exc),
+                        message=str(exc),
+                        traceback=tb_mod.format_exc(),
+                    )
+                )
             finally:
                 comfy.utils.set_progress_bar_global_hook(saved_hook)
                 _free_memory()
@@ -149,6 +157,7 @@ class ComfyUILibraryBackend:
 
         if _on_spaces():
             import spaces
+
             execute = spaces.GPU(duration=gpu_duration)(_worker)
             thread = threading.Thread(target=execute, daemon=True)
         else:
@@ -165,6 +174,7 @@ class ComfyUILibraryBackend:
         """Cancel the currently running workflow (if any)."""
         try:
             import comfy.model_management as mm
+
             mm.interrupt_current_processing()
         except Exception:
             pass
@@ -183,24 +193,27 @@ def _free_memory() -> None:
     """Free VRAM after a workflow finishes (success or failure)."""
     try:
         import comfy.model_management as mm
+
         mm.unload_all_models()
     except Exception:
         pass
     try:
         import torch
+
         if torch.backends.mps.is_available():
             torch.mps.empty_cache()
     except Exception:
         pass
     try:
         import torch
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception:
         pass
 
 
-def _first_video_path(outputs: Iterable) -> Optional[str]:
+def _first_video_path(outputs: Iterable) -> str | None:
     """Find the first .mp4 path emitted by VHS_VideoCombine in PromptExecutor outputs."""
     for output in outputs:
         if not isinstance(output, dict):

@@ -7,6 +7,7 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = ["comfyui/", ".venv/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

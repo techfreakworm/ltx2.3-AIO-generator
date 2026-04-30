@@ -1,4 +1,5 @@
 """Shared pytest fixtures and CLI flags."""
+
 import json
 import os
 import pathlib
@@ -11,7 +12,8 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_MASTER_WORKFLOW = pathlib.Path(
     os.environ.get(
         "LTX23_MASTER_WORKFLOW",
-        pathlib.Path.home() / "Projects/comfyui/user/default/workflows"
+        pathlib.Path.home()
+        / "Projects/comfyui/user/default/workflows"
         / "1. LTX 2.3 All-In-One 260406-05.json",
     )
 )
@@ -26,9 +28,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     if not config.getoption("--gpu"):
         skip_gpu = pytest.mark.skip(reason="GPU smoke tests skipped (use --gpu)")
         for item in items:

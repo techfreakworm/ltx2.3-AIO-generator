@@ -1,4 +1,5 @@
 """Pure functions over LTX 2.3 mode workflow JSON templates."""
+
 from __future__ import annotations
 
 import copy
