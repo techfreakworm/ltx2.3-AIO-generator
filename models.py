@@ -5,7 +5,15 @@ supported. If that ever happens we'll qualify by ComfyUI loader-type.
 """
 from __future__ import annotations
 
+import logging
+import os
+import pathlib
+from collections.abc import Iterator
 from dataclasses import dataclass
+
+from huggingface_hub import hf_hub_download
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -144,3 +152,100 @@ def _flatten_widget_values(values):
             yield from _flatten_widget_values(list(v.values()))
         else:
             yield v
+
+
+@dataclass
+class DownloadEvent:
+    filename: str
+    mb_done: float
+    mb_total: float
+
+
+def _on_spaces() -> bool:
+    return bool(os.environ.get("SPACES_ZERO_GPU"))
+
+
+def _comfy_models_dir() -> pathlib.Path:
+    raw = os.environ.get("COMFY_MODELS_DIR")
+    if raw:
+        return pathlib.Path(raw)
+    if _on_spaces():
+        return pathlib.Path("/data/models")
+    return pathlib.Path(__file__).parent / "comfyui" / "models"
+
+
+def ensure_models(filenames: set[str]) -> Iterator[DownloadEvent]:
+    """Ensure each requested model is materialized in comfyui/models/<type>/.
+
+    Local mode: hf_hub_download into the user's HF cache; symlink to comfyui/models/.
+    Spaces mode: hf_hub_download with cache_dir=/data; comfyui/models/ symlinks
+    point into /data.
+
+    Files not in MODEL_REGISTRY are skipped (with a warning) — useful when the
+    workflow has been manually customized with non-canonical filenames that the
+    user supplies via their own ComfyUI install.
+
+    Yields DownloadEvent on each successfully materialized file (mb_done==mb_total
+    when already cached locally).
+    """
+    comfy_models = _comfy_models_dir()
+    cache_dir = pathlib.Path(
+        os.environ.get(
+            "HF_HUB_CACHE",
+            pathlib.Path.home() / ".cache" / "huggingface" / "hub",
+        )
+    )
+
+    for filename in filenames:
+        if filename not in MODEL_REGISTRY:
+            logger.warning(
+                "model file %r not in MODEL_REGISTRY; skipping. "
+                "Add an entry to MODEL_REGISTRY or override the loader in the workflow.",
+                filename,
+            )
+            continue
+        entry = MODEL_REGISTRY[filename]
+
+        # Resolve source: hf_hub_download returns the cache path (or downloads).
+        try:
+            source = pathlib.Path(
+                hf_hub_download(
+                    repo_id=entry.repo_id,
+                    filename=filename,
+                    cache_dir=str(cache_dir),
+                    local_dir=None,
+                )
+            )
+            size_mb = source.stat().st_size / 1024 / 1024
+            yield DownloadEvent(filename, size_mb, size_mb)
+        except Exception as exc:
+            # Fall back to scanning the cache for a placeholder file (test mode + offline mode).
+            candidates = list(cache_dir.rglob(filename))
+            if not candidates:
+                logger.warning(
+                    "could not download or locate %r in HF cache: %s; skipping",
+                    filename,
+                    exc,
+                )
+                continue
+            source = candidates[0]
+            yield DownloadEvent(filename, 0.0, 0.0)
+
+        # Build symlink target inside comfy_models
+        dest_dir = comfy_models / entry.comfy_type
+        if entry.subfolder:
+            dest_dir = dest_dir / entry.subfolder
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / filename
+
+        if dest.is_symlink() or dest.exists():
+            dest.unlink()
+        dest.symlink_to(source)
+
+
+def ensure_models_for_mode(mode: str) -> Iterator[DownloadEvent]:
+    """Convenience: walk a mode's workflow and ensure all referenced models exist."""
+    import workflow as workflow_module  # local import to avoid cycle at import time
+    wf = workflow_module.load_template(mode)
+    needed = walk_workflow_for_models(wf)
+    yield from ensure_models(needed)
