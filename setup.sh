@@ -39,7 +39,11 @@ echo "▶ Installing AIO app dependencies"
 pip install -r requirements.txt
 
 echo "▶ Symlinking models from HF cache"
-python tools/refresh_models.py || true  # ok to fail before tools/ exists
+if [[ -f tools/refresh_models.py ]]; then
+  python tools/refresh_models.py
+else
+  echo "  (tools/refresh_models.py not yet present — skipping; will be added in Task 16)"
+fi
 
 echo
 echo "✓ Setup complete."
