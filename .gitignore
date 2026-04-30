@@ -1,0 +1,45 @@
+# Superpowers brainstorming session artifacts
+.superpowers/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Models (downloaded to HF cache, never to repo)
+models/
+checkpoints/
+*.safetensors
+*.gguf
+
+# Outputs
+outputs/
+generated/
+*.mp4
+*.wav
+*.webm
+!demo/**/*.mp4
+!demo/**/*.wav
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local
+*.log
+
+# Gradio cache
+gradio_cached_examples/
+flagged/
