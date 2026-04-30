@@ -86,17 +86,14 @@ _CUSTOM_CSS = """
 
 
 def build_app() -> gr.Blocks:
-    with gr.Blocks(
-        theme=gr.themes.Soft(),
-        title="LTX 2.3 All-in-One",
-        css=_CUSTOM_CSS,
-    ) as app:
+    with gr.Blocks(theme=gr.themes.Soft(), title="LTX 2.3 All-in-One", css=_CUSTOM_CSS) as app:
         gr.Markdown("# ⚡ LTX 2.3 All-in-One")
         with gr.Row():
             with gr.Column(scale=1, min_width=200):
                 _render_sidebar()
             with gr.Column(scale=4):
-                _render_mode_panels()
+                handles = _render_mode_panels()
+        # Generate-handler wiring deferred to Task 23.
     return app
 
 
@@ -108,12 +105,60 @@ def _render_sidebar() -> None:
     gr.Button("Unload all models", variant="secondary")
 
 
-def _render_mode_panels() -> None:
-    with gr.Tabs():
+def _render_mode_panels() -> dict[str, dict]:
+    """Render one form per mode. Returns the component handles keyed by mode."""
+    handles: dict[str, dict] = {}
+    with gr.Tabs() as tabs:
         for name, mode in modes.MODE_REGISTRY.items():
             with gr.Tab(label=f"{mode.icon} {mode.label}"):
-                gr.Markdown(f"## {mode.label}")
-                gr.Markdown(f"_(Mode `{name}` form goes here — built in Task 22.)_")
+                handles[name] = _render_one_mode(name)
+    return handles
+
+
+def _render_one_mode(name: str) -> dict:
+    """Render a per-mode form. Returns component handles for the generate handler."""
+    mode = modes.MODE_REGISTRY[name]
+    handles: dict = {"mode": name}
+
+    with gr.Row():
+        with gr.Column(scale=2):
+            handles["prompt"] = gr.Textbox(label="Prompt", lines=4, placeholder="Describe the shot...")
+
+            # Mode-specific media inputs
+            if name == "i2v":
+                handles["image"] = gr.Image(label="Source image", type="filepath")
+            elif name == "a2v":
+                handles["audio"] = gr.Audio(label="Source audio", type="filepath")
+            elif name == "lipsync":
+                handles["image"] = gr.Image(label="Portrait", type="filepath")
+                handles["audio"] = gr.Audio(label="Speech audio", type="filepath")
+            elif name == "keyframe":
+                handles["first_frame"] = gr.Image(label="First frame", type="filepath")
+                handles["last_frame"] = gr.Image(label="Last frame", type="filepath")
+            elif name == "style":
+                handles["input_video"] = gr.Video(label="Source video")
+
+            handles["preset"] = ui.preset_bar()
+            with gr.Row():
+                handles["width"] = gr.Slider(256, 1280, value=512, step=32, label="Width")
+                handles["height"] = gr.Slider(256, 1280, value=768, step=32, label="Height")
+            with gr.Row():
+                handles["frames"] = gr.Slider(9, 121, value=81, step=8, label="Frames (8k+1)")
+                handles["fps"] = gr.Slider(8, 30, value=24, step=1, label="FPS")
+            handles["seed"] = gr.Number(label="Seed", value=42, precision=0)
+
+            with gr.Accordion("Advanced ▾", open=False):
+                handles["lora"] = ui.lora_chrome(name)
+                handles["negative_prompt"] = gr.Textbox(label="Negative prompt", lines=2)
+
+            handles["generate_btn"] = gr.Button("▶ Generate", variant="primary", size="lg")
+
+        with gr.Column(scale=2):
+            handles["status"] = ui.status_banner()
+            handles["video_out"] = gr.Video(label="Output", autoplay=True)
+            handles["history"] = gr.Markdown("")
+
+    return handles
 
 
 if __name__ == "__main__":
