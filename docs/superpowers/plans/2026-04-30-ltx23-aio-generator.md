@@ -1913,12 +1913,18 @@ class ComfyUILibraryBackend:
             sys.path.insert(0, str(self._comfy_dir))
 
         # Defer comfy imports until the path is set up.
-        import comfy.cli_args  # noqa: F401 — imports as side-effect register
-        import comfy.execution
-        import nodes  # ComfyUI's node registration entrypoint
+        # NOTE: ComfyUI ships PromptExecutor in the top-level `execution.py`
+        # module, NOT under `comfy.execution`. Same for `nodes`. Both must be
+        # imported AFTER the sys.path insert above.
+        import asyncio
 
-        nodes.init_extra_nodes()  # discover custom_nodes/
-        self._executor = comfy.execution.PromptExecutor(server_instance=None)
+        import comfy.cli_args  # noqa: F401 — side-effect: registers CLI flags
+        import execution  # top-level module — provides PromptExecutor
+        import nodes  # top-level module — provides init_extra_nodes (async)
+
+        # init_extra_nodes is an async function in modern ComfyUI; run it once.
+        asyncio.run(nodes.init_extra_nodes())  # discover custom_nodes/
+        self._executor = execution.PromptExecutor(server_instance=None)
 
     def __repr__(self) -> str:
         return f"ComfyUILibraryBackend(comfy_dir={self._comfy_dir!r})"
@@ -1984,7 +1990,9 @@ class ComfyUILibraryBackend:  # extending — shown in full above; appending met
             import comfy.utils
             saved_hook = getattr(comfy.utils, "PROGRESS_BAR_HOOK", None)
             try:
-                comfy.utils.PROGRESS_BAR_HOOK = _hook
+                # Use the public setter; it writes the same global the
+                # ProgressBar class reads, but is the documented API.
+                comfy.utils.set_progress_bar_global_hook(_hook)
                 self._executor.execute(
                     workflow,
                     prompt_id="ltx23-aio",
@@ -2000,7 +2008,7 @@ class ComfyUILibraryBackend:  # extending — shown in full above; appending met
                 _push(ErrorEvent(category=_classify(exc), message=str(exc),
                                  traceback=tb_mod.format_exc()))
             finally:
-                comfy.utils.PROGRESS_BAR_HOOK = saved_hook
+                comfy.utils.set_progress_bar_global_hook(saved_hook)
                 _free_memory()
                 _push(None)  # sentinel: stop the consumer
 
@@ -2317,7 +2325,12 @@ def _on_spaces() -> bool:
 
 
 COMFYUI_REPO = "https://github.com/comfyanonymous/ComfyUI.git"
-COMFYUI_COMMIT = os.environ.get("LTX23_AIO_COMFYUI_COMMIT", "main")
+# Pinned to the same commit the local git submodule uses (set in Task 5).
+# Override via env var only when intentionally testing a different ComfyUI version.
+COMFYUI_COMMIT = os.environ.get(
+    "LTX23_AIO_COMFYUI_COMMIT",
+    "eb0686bbb60c83e44c3a3e4f7defd0f589cfef10",
+)
 
 CUSTOM_NODES_PINNED: list[tuple[str, str]] = [
     ("https://github.com/Lightricks/ComfyUI-LTXVideo.git", "main"),
