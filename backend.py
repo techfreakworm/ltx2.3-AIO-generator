@@ -5,10 +5,13 @@ divergence between local and HF Spaces deployment.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import pathlib
 import sys
-from collections.abc import AsyncIterator
+import threading
+import traceback as tb_mod
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -84,3 +87,129 @@ class ComfyUILibraryBackend:
 
     def __repr__(self) -> str:
         return f"ComfyUILibraryBackend(comfy_dir={self._comfy_dir!r})"
+
+    async def submit(
+        self, mode: str, workflow: dict, gpu_duration: int = 120
+    ) -> AsyncIterator[Any]:
+        """Run a workflow end-to-end. Yields Download/Progress/Output/Error events."""
+        # Pre-flight: ensure all model files exist.
+        try:
+            needed = models.walk_workflow_for_models(workflow)
+            for download_event in models.ensure_models(needed):
+                yield download_event
+        except Exception as e:
+            yield ErrorEvent(
+                category="download",
+                message=str(e),
+                traceback=tb_mod.format_exc(),
+            )
+            return
+
+        # Run the inference in a worker thread; pass progress events through a queue.
+        queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def _push(event: Any) -> None:
+            asyncio.run_coroutine_threadsafe(queue.put(event), loop)
+
+        def _hook(value: int, total: int, _preview=None) -> None:
+            _push(ProgressEvent(
+                stage=0, stage_label="diffusion",
+                step=int(value), total_steps=int(total),
+            ))
+
+        def _worker() -> None:
+            import comfy.utils
+            saved_hook = getattr(comfy.utils, "PROGRESS_BAR_HOOK", None)
+            try:
+                # Use the public setter; it writes the same global the
+                # ProgressBar class reads, but is the documented API.
+                comfy.utils.set_progress_bar_global_hook(_hook)
+                self._executor.execute(
+                    workflow,
+                    prompt_id="ltx23-aio",
+                    extra_data={"client_id": "ltx23-aio"},
+                    execute_outputs=[],
+                )
+                # PromptExecutor writes output files via VHS_VideoCombine; we read its
+                # history to find the most recent saved video.
+                outputs = list(self._executor.outputs.values())
+                video_path = _first_video_path(outputs) or ""
+                _push(OutputEvent(video_path=video_path))
+            except Exception as exc:
+                _push(ErrorEvent(
+                    category=_classify(exc),
+                    message=str(exc),
+                    traceback=tb_mod.format_exc(),
+                ))
+            finally:
+                comfy.utils.set_progress_bar_global_hook(saved_hook)
+                _free_memory()
+                _push(None)  # sentinel: stop the consumer
+
+        if _on_spaces():
+            import spaces
+            execute = spaces.GPU(duration=gpu_duration)(_worker)
+            thread = threading.Thread(target=execute, daemon=True)
+        else:
+            thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+
+        while True:
+            event = await queue.get()
+            if event is None:
+                return
+            yield event
+
+    def interrupt(self) -> None:
+        """Cancel the currently running workflow (if any)."""
+        try:
+            import comfy.model_management as mm
+            mm.interrupt_current_processing()
+        except Exception:
+            pass
+
+
+def _classify(exc: Exception) -> str:
+    name = type(exc).__name__.lower()
+    if "outofmemory" in name or "cuda out of memory" in str(exc).lower():
+        return "oom"
+    if "interrupt" in name:
+        return "interrupt"
+    return "execution"
+
+
+def _free_memory() -> None:
+    """Free VRAM after a workflow finishes (success or failure)."""
+    try:
+        import comfy.model_management as mm
+        mm.unload_all_models()
+    except Exception:
+        pass
+    try:
+        import torch
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+    except Exception:
+        pass
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+def _first_video_path(outputs: Iterable) -> Optional[str]:
+    """Find the first .mp4 path emitted by VHS_VideoCombine in PromptExecutor outputs."""
+    for output in outputs:
+        if not isinstance(output, dict):
+            continue
+        for value in output.values():
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict) and "filename" in item:
+                        fn = item["filename"]
+                        if fn.endswith((".mp4", ".webm", ".mov")):
+                            return item.get("fullpath", fn)
+    return None
