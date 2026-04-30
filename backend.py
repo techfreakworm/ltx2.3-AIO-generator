@@ -113,7 +113,13 @@ class ComfyUILibraryBackend:
         # PromptExecutor expects a `server` with client_id, send_sync, last_node_id,
         # queue_updated. A minimal stub no-ops all of them — we don't run a real
         # websocket server, we surface progress via comfy.utils.PROGRESS_BAR_HOOK.
-        self._executor = execution.PromptExecutor(server=_StubServer())
+        # cache_args["ram"] is read unconditionally inside execute_async even when
+        # cache_type is the default false — provide a sensible default so it doesn't
+        # NoneType-subscript at line 727.
+        self._executor = execution.PromptExecutor(
+            server=_StubServer(),
+            cache_args={"ram": 16.0, "lru": 0},
+        )
 
     def __repr__(self) -> str:
         return f"ComfyUILibraryBackend(comfy_dir={self._comfy_dir!r})"
@@ -172,11 +178,13 @@ class ComfyUILibraryBackend:
                 video_path = _first_video_path(outputs) or ""
                 _push(OutputEvent(video_path=video_path))
             except Exception as exc:
+                tb_text = tb_mod.format_exc()
+                print(f"[backend] worker exception:\n{tb_text}", file=sys.stderr, flush=True)
                 _push(
                     ErrorEvent(
                         category=_classify(exc),
                         message=str(exc),
-                        traceback=tb_mod.format_exc(),
+                        traceback=tb_text,
                     )
                 )
             finally:
