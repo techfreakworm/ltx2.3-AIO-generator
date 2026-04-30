@@ -53,6 +53,19 @@ def _on_spaces() -> bool:
     return bool(os.environ.get("SPACES_ZERO_GPU"))
 
 
+class _StubServer:
+    """Minimal stub matching the surface ComfyUI's PromptExecutor expects."""
+
+    client_id: str | None = "ltx23-aio"
+    last_node_id: str | None = None
+
+    def send_sync(self, event: str, data: dict, sid: str | None = None) -> None:
+        pass
+
+    def queue_updated(self) -> None:
+        pass
+
+
 def _comfy_dir() -> pathlib.Path:
     if _on_spaces():
         return pathlib.Path("/data/comfyui")
@@ -77,14 +90,30 @@ class ComfyUILibraryBackend:
         # module, NOT under `comfy.execution`. Same for `nodes`. Both must be
         # imported AFTER the sys.path insert above.
         import asyncio
+        import threading
 
         import comfy.cli_args  # noqa: F401 — side-effect: registers CLI flags
         import execution  # top-level module — provides PromptExecutor
         import nodes  # top-level module — provides init_extra_nodes (async)
 
-        # init_extra_nodes is an async function in modern ComfyUI; run it once.
-        asyncio.run(nodes.init_extra_nodes())  # discover custom_nodes/
-        self._executor = execution.PromptExecutor(server_instance=None)
+        # `nodes.init_extra_nodes` is async. We may be called from within a
+        # running event loop (Gradio's handler) — running `asyncio.run()` there
+        # raises. Run the coroutine in a fresh loop on a worker thread instead.
+        def _init_in_thread() -> None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(nodes.init_extra_nodes())
+            finally:
+                loop.close()
+
+        thread = threading.Thread(target=_init_in_thread, daemon=False)
+        thread.start()
+        thread.join()
+        # PromptExecutor expects a `server` with client_id, send_sync, last_node_id,
+        # queue_updated. A minimal stub no-ops all of them — we don't run a real
+        # websocket server, we surface progress via comfy.utils.PROGRESS_BAR_HOOK.
+        self._executor = execution.PromptExecutor(server=_StubServer())
 
     def __repr__(self) -> str:
         return f"ComfyUILibraryBackend(comfy_dir={self._comfy_dir!r})"

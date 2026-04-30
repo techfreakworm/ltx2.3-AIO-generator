@@ -201,6 +201,18 @@ def ensure_models(filenames: set[str]) -> Iterator[DownloadEvent]:
             continue
         entry = MODEL_REGISTRY[filename]
 
+        # Short-circuit: if the file is already present at its expected location
+        # in comfyui/models/<type>/[<subfolder>/]<filename>, skip the HF dance
+        # entirely. This is the local-dev hot path where the user's existing
+        # ComfyUI models/ is symlinked in.
+        existing_dest_dir = comfy_models / entry.comfy_type
+        if entry.subfolder:
+            existing_dest_dir = existing_dest_dir / entry.subfolder
+        existing_dest = existing_dest_dir / filename
+        if existing_dest.exists() or existing_dest.is_symlink():
+            yield DownloadEvent(filename, 0.0, 0.0)
+            continue
+
         # Resolve source: hf_hub_download returns the cache path (or downloads).
         try:
             source = pathlib.Path(
