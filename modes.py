@@ -20,7 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-Patch = tuple[int, int, Any]
+Patch = tuple[int, int | str, Any]
 ParameterizeFn = Callable[[dict[str, Any]], list[Patch]]
 
 
@@ -159,7 +159,7 @@ def _a2v_parameterize(inp: dict[str, Any]) -> list[Patch]:
     return [
         (A2V_NODE_PROMPT, 0, inp["prompt"]),
         (A2V_NODE_NEG_PROMPT, 0, inp.get("negative_prompt", "")),
-        (A2V_NODE_AUDIO, 0, inp["audio"]),
+        (A2V_NODE_AUDIO, "audio", inp["audio"]),
         (A2V_NODE_WIDTH, 0, int(inp["width"])),
         (A2V_NODE_HEIGHT, 0, int(inp["height"])),
         (A2V_NODE_FPS, 0, int(inp["fps"])),
@@ -172,7 +172,7 @@ def _lipsync_parameterize(inp: dict[str, Any]) -> list[Patch]:
         (LIPSYNC_NODE_PROMPT, 0, inp["prompt"]),
         (LIPSYNC_NODE_NEG_PROMPT, 0, inp.get("negative_prompt", "")),
         (LIPSYNC_NODE_IMAGE, 0, inp["image"]),
-        (LIPSYNC_NODE_AUDIO, 0, inp["audio"]),
+        (LIPSYNC_NODE_AUDIO, "audio", inp["audio"]),
         (LIPSYNC_NODE_FPS, 0, int(inp["fps"])),
         (LIPSYNC_NODE_CLIP_LENGTH, 0, _frames_to_seconds(int(inp["frames"]), int(inp["fps"]))),
     ]
@@ -193,7 +193,7 @@ def _style_parameterize(inp: dict[str, Any]) -> list[Patch]:
     return [
         (STYLE_NODE_PROMPT, 0, inp["prompt"]),
         (STYLE_NODE_NEG_PROMPT, 0, inp.get("negative_prompt", "")),
-        (STYLE_NODE_INPUT_VIDEO, 0, inp["input_video"]),
+        (STYLE_NODE_INPUT_VIDEO, "video", inp["input_video"]),
         (STYLE_NODE_FPS, 0, int(inp["fps"])),
         (STYLE_NODE_CLIP_LENGTH, 0, _frames_to_seconds(int(inp["frames"]), int(inp["fps"]))),
     ]

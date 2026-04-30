@@ -54,3 +54,19 @@ def test_validate_rejects_orphan_link():
     wf["links"].append([99999, 1, 0, 999_999_999, 0, "INT"])  # destination doesn't exist
     with pytest.raises(ValueError, match="orphan link"):
         workflow.validate(wf)
+
+
+def test_set_input_handles_dict_widgets_values():
+    """VHS_* nodes carry dict-style widgets_values; set_input must support str keys."""
+    wf = workflow.load_template("a2v")
+    # Find a node whose widgets_values is a dict (e.g., VHS_LoadAudioUpload).
+    target = next(
+        (n for n in wf["nodes"] if isinstance(n.get("widgets_values"), dict)),
+        None,
+    )
+    assert target is not None, "no dict-widgets node in a2v template"
+    # Pick an existing key to patch (don't invent one — tests should reflect real graph shape).
+    existing_key = next(iter(target["widgets_values"].keys()))
+    workflow.set_input(wf, target["id"], existing_key, "/tmp/new_value.wav")
+    refetched = next(n for n in wf["nodes"] if n["id"] == target["id"])
+    assert refetched["widgets_values"][existing_key] == "/tmp/new_value.wav"
