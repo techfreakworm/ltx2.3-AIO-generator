@@ -94,3 +94,53 @@ MODEL_REGISTRY: dict[str, ModelEntry] = {
         )
     },
 }
+
+
+LOADER_NODE_TYPES: tuple[str, ...] = (
+    "CheckpointLoaderSimple",
+    "UNETLoader",
+    "UnetLoaderGGUF",
+    "VAELoader",
+    "VAELoaderKJ",
+    "LoraLoader",
+    "Power Lora Loader (rgthree)",
+    "LTXVGemmaCLIPModelLoader",
+    "LatentUpscaleModelLoader",
+    "DualCLIPLoader",
+)
+
+
+def walk_workflow_for_models(workflow: dict) -> set[str]:
+    """Return the set of model filenames referenced by loader nodes in the workflow.
+
+    Pulls filenames from nodes whose `type` matches a known loader. Filenames are
+    typically in `widgets_values[0]` (CheckpointLoaderSimple) or in nested rows
+    (Power Lora Loader). Falls back to scanning all string-valued widget entries
+    for `*.safetensors` / `*.gguf`.
+    """
+    needed: set[str] = set()
+    for node in workflow.get("nodes", []):
+        if node.get("type") not in LOADER_NODE_TYPES:
+            continue
+        widgets = node.get("widgets_values") or []
+        for value in _flatten_widget_values(widgets):
+            if isinstance(value, str) and (
+                value.endswith(".safetensors") or value.endswith(".gguf")
+                or value == "tokenizer.model" or value.endswith(".json")
+            ):
+                needed.add(value)
+    return needed
+
+
+def _flatten_widget_values(values):
+    """Walk nested list/dict widget structures, yielding leaf values."""
+    if isinstance(values, dict):
+        yield from _flatten_widget_values(list(values.values()))
+        return
+    for v in values:
+        if isinstance(v, (list, tuple)):
+            yield from _flatten_widget_values(v)
+        elif isinstance(v, dict):
+            yield from _flatten_widget_values(list(v.values()))
+        else:
+            yield v
