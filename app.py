@@ -119,8 +119,9 @@ _bootstrap()
 
 
 # ---------------------------------------------------------------------------
-# Styling: Topaz Cinema Slate palette + hamburger drawer mechanics.
-# Drawer is fixed-position sidebar at ≥1024 px, slide-in overlay below.
+# Styling: hide the default top tab strip (drawer nav drives selection),
+# add status-card styling, plus single responsive breakpoint at 1023 px
+# (drawer slides over body) / 1024 px+ (drawer pinned).
 # ---------------------------------------------------------------------------
 
 _CUSTOM_CSS = """
