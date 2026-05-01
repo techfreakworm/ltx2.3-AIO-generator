@@ -26,6 +26,7 @@ generated/
 *.webm
 !demo/**/*.mp4
 !demo/**/*.wav
+!assets/seed_inputs/**
 
 # OS
 .DS_Store
