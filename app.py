@@ -236,7 +236,7 @@ _CUSTOM_CSS = """
 @media (max-width: 1023px) {
     .aio-ham-label { display: flex; }
     .aio-drawer {
-        position: absolute;
+        position: fixed;
         top: 0; left: 0; bottom: 0;
         z-index: 10;
         box-shadow: 4px 0 24px rgba(0,0,0,0.6);
@@ -247,7 +247,7 @@ _CUSTOM_CSS = """
        lets us reach without JS — when checked, slide drawer in. */
     body:has(#aio-ham-toggle:checked) .aio-drawer { transform: translateX(0); }
     body:has(#aio-ham-toggle:checked) .aio-shell::before {
-        content: ""; position: absolute; inset: 0;
+        content: ""; position: fixed; inset: 0;
         background: rgba(0,0,0,0.55); z-index: 9;
     }
 
