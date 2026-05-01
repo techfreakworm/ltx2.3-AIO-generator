@@ -33,11 +33,11 @@ COMFYUI_COMMIT = os.environ.get(
 )
 
 CUSTOM_NODES_PINNED: list[tuple[str, str]] = [
-    ("https://github.com/Lightricks/ComfyUI-LTXVideo.git", "main"),
-    ("https://github.com/kijai/ComfyUI-KJNodes.git", "main"),
-    ("https://github.com/rgthree/rgthree-comfy.git", "main"),
-    ("https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git", "main"),
-    ("https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git", "main"),
+    ("https://github.com/Lightricks/ComfyUI-LTXVideo.git", "2acf7af8991f33b5cc06ec26753cb6e88e057d04"),
+    ("https://github.com/kijai/ComfyUI-KJNodes.git", "01d9fa9c983273532cacdf9532c74a93c7dc86d2"),
+    ("https://github.com/rgthree/rgthree-comfy.git", "683836c46e898668936c433502504cc0627482c5"),
+    ("https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git", "2984ec4c4b93292421888f38db74a5e8802a8ff8"),
+    ("https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git", "609f3afaa74b2f88ef9ce8d939626065e3247469"),
 ]
 
 
