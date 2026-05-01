@@ -119,9 +119,8 @@ _bootstrap()
 
 
 # ---------------------------------------------------------------------------
-# Styling: hide the default top tab strip (sidebar drives selection),
-# add status-card styling, plus responsive breakpoints (≤1024px tablet,
-# ≤700px mobile).
+# Styling: Topaz Cinema Slate palette + hamburger drawer mechanics.
+# Drawer is fixed-position sidebar at ≥1024 px, slide-in overlay below.
 # ---------------------------------------------------------------------------
 
 _CUSTOM_CSS = """
@@ -149,12 +148,13 @@ _CUSTOM_CSS = """
 }
 .aio-ham-toggle { display: none; }  /* hidden checkbox drives drawer state */
 .aio-ham-label {
+    display: none;
     width: 32px; height: 32px;
     border: 1px solid #262C35;
     border-radius: 5px;
     color: #7C8693;
     cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
+    align-items: center; justify-content: center;
     font-size: 18px; font-weight: 300;
     user-select: none;
 }
@@ -182,7 +182,7 @@ _CUSTOM_CSS = """
     background: #12161B;
     padding: 14px 10px !important;
     flex-shrink: 0;
-    transition: transform 0.2s ease, width 0.2s ease;
+    transition: transform 0.2s ease;
 }
 .aio-drawer-heading {
     font-family: 'IBM Plex Mono', ui-monospace, monospace;
@@ -220,10 +220,10 @@ _CUSTOM_CSS = """
 }
 .status-row { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 .status-stage { font-weight: 600; color: #E0A458; }
-.status-meta { font-size: 12px; color: #7C8693; font-family: 'IBM Plex Mono', monospace; }
+.status-meta { font-size: 12px; color: #7C8693; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 .status-bar { height: 4px; background: #262C35; border-radius: 99px; overflow: hidden; }
 .status-fill { height: 100%; background: #E0A458; transition: width .3s; }
-.status-mem { font-size: 11px; color: #7C8693; margin-top: 6px; font-family: 'IBM Plex Mono', monospace; }
+.status-mem { font-size: 11px; color: #7C8693; margin-top: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 .status-error {
     background: #3A1E20 !important;
     border-color: #F4A6A8 !important;
@@ -244,8 +244,8 @@ _CUSTOM_CSS = """
     }
     /* checkbox at #aio-ham-toggle is the only sibling pattern Gradio
        lets us reach without JS — when checked, slide drawer in. */
-    body:has(.aio-ham-toggle:checked) .aio-drawer { transform: translateX(0); }
-    body:has(.aio-ham-toggle:checked) .aio-shell::before {
+    body:has(#aio-ham-toggle:checked) .aio-drawer { transform: translateX(0); }
+    body:has(#aio-ham-toggle:checked) .aio-shell::before {
         content: ""; position: absolute; inset: 0;
         background: rgba(0,0,0,0.55); z-index: 9;
     }
