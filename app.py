@@ -147,7 +147,7 @@ _CUSTOM_CSS = """
     border-bottom: 1px solid #262C35;
     background: #12161B;
     position: relative;
-    z-index: 11;
+    z-index: 60;
 }
 .aio-ham-label {
     display: none;
@@ -240,7 +240,7 @@ _CUSTOM_CSS = """
         position: fixed;
         top: 0; bottom: 0;
         left: -100%;
-        z-index: 10;
+        z-index: 50;
         box-shadow: 4px 0 24px rgba(0,0,0,0.6);
         max-width: 80vw;
         overflow: hidden;
@@ -251,7 +251,7 @@ _CUSTOM_CSS = """
     .aio-shell.drawer-open .aio-drawer { left: 0; }
     .aio-shell.drawer-open::before {
         content: ""; position: fixed; inset: 0;
-        background: rgba(0,0,0,0.92); z-index: 9;
+        background: rgba(0,0,0,0.92); z-index: 45;
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
     }
