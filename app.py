@@ -243,7 +243,9 @@ _CUSTOM_CSS = """
         z-index: 50;
         box-shadow: 4px 0 24px rgba(0,0,0,0.6);
         max-width: 80vw;
-        overflow: hidden;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-top: 80px !important;
     }
     /* `.aio-shell.drawer-open` is toggled by the hamburger's inline JS.
        `body:has(:checked)` would be cleaner but Gradio prefixes user CSS
