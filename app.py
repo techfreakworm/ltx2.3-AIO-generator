@@ -251,9 +251,9 @@ _CUSTOM_CSS = """
     .aio-shell.drawer-open .aio-drawer { left: 0; }
     .aio-shell.drawer-open::before {
         content: ""; position: fixed; inset: 0;
-        background: rgba(0,0,0,0.75); z-index: 9;
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
+        background: rgba(0,0,0,0.92); z-index: 9;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
     }
 
     /* Mobile sub-tweaks */
@@ -312,11 +312,33 @@ _TOPAZ_THEME = gr.themes.Base(
 )
 
 
+_HEAD_HTML = """
+<script>
+(function(){
+  if (window._aioDismissInstalled) return;
+  window._aioDismissInstalled = true;
+  document.addEventListener("click", function(e) {
+    var s = document.querySelector(".aio-shell");
+    if (!s || !s.classList.contains("drawer-open")) return;
+    if (e.target.closest(".aio-drawer") || e.target.closest(".aio-ham-label")) return;
+    s.classList.remove("drawer-open");
+    var b = document.querySelector(".aio-ham-label");
+    if (b) {
+      b.textContent = "≡";
+      b.setAttribute("aria-expanded", "false");
+    }
+  });
+})();
+</script>
+"""
+
+
 def build_app() -> gr.Blocks:
-    with gr.Blocks(theme=_TOPAZ_THEME, title="LTX 2.3 Studio", css=_CUSTOM_CSS) as app:
+    with gr.Blocks(theme=_TOPAZ_THEME, title="LTX 2.3 Studio", css=_CUSTOM_CSS, head=_HEAD_HTML) as app:
         # Header: hamburger button toggles `.drawer-open` on `.aio-shell`.
-        # The script also installs a once-only click-outside dismisser so tapping
-        # the scrim, header, or any non-drawer element closes the drawer.
+        # The click-outside dismisser is registered via gr.Blocks(head=...)
+        # below — Gradio strips <script> tags inside gr.HTML so it has to
+        # live in <head> to actually run.
         gr.HTML(
             '<div class="aio-header">'
             '  <button type="button" class="aio-ham-label" '
@@ -328,15 +350,6 @@ def build_app() -> gr.Blocks:
             '  <span class="aio-title">LTX 2.3 <span class="accent">Studio</span></span>'
             '  <span class="aio-mode-tag" id="aio-mode-tag">T2V</span>'
             '</div>'
-            '<script>(function(){if(window._aioDismiss)return;window._aioDismiss=true;'
-            'document.addEventListener("click",function(e){'
-            'var s=document.querySelector(".aio-shell");'
-            'if(!s||!s.classList.contains("drawer-open"))return;'
-            'if(e.target.closest(".aio-drawer")||e.target.closest(".aio-ham-label"))return;'
-            's.classList.remove("drawer-open");'
-            'var b=document.querySelector(".aio-ham-label");'
-            'if(b){b.textContent="\\u2261";b.setAttribute("aria-expanded","false");}'
-            '});})();</script>'
         )
 
         with gr.Row(elem_classes=["aio-shell"]):
