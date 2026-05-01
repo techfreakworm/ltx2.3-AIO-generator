@@ -187,8 +187,47 @@ _CUSTOM_CSS = """
 # ---------------------------------------------------------------------------
 
 
+_TOPAZ_THEME = gr.themes.Base(
+    primary_hue=gr.themes.Color(
+        c50="#FBE5C7", c100="#F5D29C", c200="#EFC174", c300="#E9B05A",
+        c400="#E5A75B", c500="#E0A458", c600="#C68D3F", c700="#A6722E",
+        c800="#7E5722", c900="#583C18", c950="#3A2810",
+    ),
+    neutral_hue=gr.themes.Color(
+        c50="#E6E8EB", c100="#C9CDD3", c200="#ACB1B9", c300="#909700",
+        c400="#7C8693", c500="#626972", c600="#4A4F58", c700="#363B43",
+        c800="#262C35", c900="#1A1F26", c950="#12161B",
+    ),
+    font=(gr.themes.GoogleFont("IBM Plex Sans"), "ui-sans-serif", "system-ui", "sans-serif"),
+    font_mono=(gr.themes.GoogleFont("IBM Plex Mono"), "ui-monospace", "monospace"),
+).set(
+    body_background_fill="#12161B",
+    background_fill_primary="#12161B",
+    background_fill_secondary="#1A1F26",
+    block_background_fill="#1A1F26",
+    block_label_background_fill="transparent",
+    body_text_color="#E6E8EB",
+    body_text_color_subdued="#7C8693",
+    border_color_primary="#262C35",
+    border_color_accent="#E0A458",
+    button_primary_background_fill="#E0A458",
+    button_primary_background_fill_hover="#F0B870",
+    button_primary_text_color="#12161B",
+    button_secondary_background_fill="#1A1F26",
+    button_secondary_background_fill_hover="#232930",
+    button_secondary_text_color="#E6E8EB",
+    button_secondary_border_color="#262C35",
+    input_background_fill="#12161B",
+    input_border_color="#262C35",
+    input_border_color_focus="#E0A458",
+    error_background_fill="#3A1E20",
+    error_text_color="#F4A6A8",
+    slider_color="#E0A458",
+)
+
+
 def build_app() -> gr.Blocks:
-    with gr.Blocks(theme=gr.themes.Soft(), title="LTX 2.3 All-in-One", css=_CUSTOM_CSS) as app:
+    with gr.Blocks(theme=_TOPAZ_THEME, title="LTX 2.3 Studio", css=_CUSTOM_CSS) as app:
         gr.Markdown("# ⚡ LTX 2.3 All-in-One")
 
         with gr.Row(elem_classes=["aio-shell"]):
