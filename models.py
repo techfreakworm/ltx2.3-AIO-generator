@@ -35,7 +35,7 @@ MODEL_REGISTRY: dict[str, ModelEntry] = {
     "ltx-2.3-22b-distilled.safetensors": ModelEntry("Lightricks/LTX-2.3", comfy_type="checkpoints"),
     "ltx-2.3-22b-dev.safetensors": ModelEntry("Lightricks/LTX-2.3", comfy_type="checkpoints"),
     "ltx-2.3-spatial-upscaler-x2-1.0.safetensors": ModelEntry(
-        "Lightricks/LTX-2.3", comfy_type="upscale_models"
+        "Lightricks/LTX-2.3", comfy_type="latent_upscale_models"
     ),
     "ltx-2.3-22b-distilled-lora-384.safetensors": ModelEntry(
         "Lightricks/LTX-2.3", comfy_type="loras"
@@ -171,14 +171,32 @@ _USER_INPUT_LOADERS = {"LoadImage", "VHS_LoadVideo", "VHS_LoadAudioUpload"}
 _MODEL_EXTS = (".safetensors", ".gguf", ".pt", ".bin", ".ckpt")
 
 
+def _walk_for_filenames(value, into: set[str]) -> None:
+    """Depth-first walk of a node's inputs, picking out model filenames.
+
+    Power Lora Loader stores its rows nested as `inputs.lora_1 = {on, lora,
+    strength}` and similar — a flat values() loop misses these. Recurse
+    through dicts and lists/tuples so nested filenames are caught.
+    """
+    if isinstance(value, str):
+        if value.endswith(_MODEL_EXTS) or value == "tokenizer.model":
+            into.add(value)
+    elif isinstance(value, dict):
+        for v in value.values():
+            _walk_for_filenames(v, into)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            _walk_for_filenames(v, into)
+
+
 def walk_workflow_for_models(workflow: dict) -> set[str]:
     """Return the set of model filenames referenced by the API-format workflow.
 
-    Walks `{node_id: {class_type, inputs}}` looking for any input value that
-    ends in a model extension. Skips loaders that read user-supplied files
-    (LoadImage, VHS_LoadVideo, VHS_LoadAudioUpload). Unknown filenames are
-    harmless — `ensure_models` log-warns and skips anything not in the
-    registry, so being inclusive here costs nothing.
+    Walks `{node_id: {class_type, inputs}}` and recursively scans each node's
+    inputs for strings ending in a model extension. Skips loaders that read
+    user-supplied files (LoadImage, VHS_LoadVideo, VHS_LoadAudioUpload).
+    Unknown filenames are harmless — `ensure_models` log-warns and skips
+    anything not in the registry, so being inclusive here costs nothing.
     """
     needed: set[str] = set()
     for node in workflow.values():
@@ -186,11 +204,7 @@ def walk_workflow_for_models(workflow: dict) -> set[str]:
             continue
         if node.get("class_type") in _USER_INPUT_LOADERS:
             continue
-        for value in (node.get("inputs") or {}).values():
-            if isinstance(value, str) and value.endswith(_MODEL_EXTS):
-                needed.add(value)
-            elif isinstance(value, str) and value == "tokenizer.model":
-                needed.add(value)
+        _walk_for_filenames(node.get("inputs") or {}, needed)
     return needed
 
 
