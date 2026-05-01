@@ -49,7 +49,11 @@ def _git_clone(url: str, dst: pathlib.Path, ref: str) -> None:
 
 def _bootstrap() -> None:
     on_spaces = _on_spaces()
-    comfy_dir = pathlib.Path("/data/comfyui" if on_spaces else "comfyui")
+    # /data requires the paid persistent-storage add-on (separate from Pro).
+    # Without it, /data is unwritable. $HOME is writable and — because ZeroGPU
+    # containers freeze on sleep rather than tear down — the clone persists
+    # across calls within a single deploy.
+    comfy_dir = (pathlib.Path.home() / "comfyui") if on_spaces else pathlib.Path("comfyui")
 
     if on_spaces and not comfy_dir.exists():
         print(f"[bootstrap] cold start on Spaces; cloning ComfyUI to {comfy_dir}", flush=True)
@@ -73,10 +77,7 @@ def _bootstrap() -> None:
 
     if str(comfy_dir) not in sys.path:
         sys.path.insert(0, str(comfy_dir))
-    os.environ.setdefault(
-        "COMFY_MODELS_DIR",
-        str(pathlib.Path("/data/models") if on_spaces else (comfy_dir / "models")),
-    )
+    os.environ.setdefault("COMFY_MODELS_DIR", str(comfy_dir / "models"))
 
     # Stage placeholder input files so the workflow's hard-referenced loaders
     # (LoadImage/VHS_Load*) don't error at runtime even when the active mode

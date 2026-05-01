@@ -160,7 +160,7 @@ class _StubPromptServerInstance:
 
 def _comfy_dir() -> pathlib.Path:
     if _on_spaces():
-        return pathlib.Path("/data/comfyui")
+        return pathlib.Path.home() / "comfyui"
     return pathlib.Path(__file__).parent / "comfyui"
 
 

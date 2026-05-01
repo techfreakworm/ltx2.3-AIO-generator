@@ -216,7 +216,7 @@ def _comfy_models_dir() -> pathlib.Path:
     if raw:
         return pathlib.Path(raw)
     if _on_spaces():
-        return pathlib.Path("/data/models")
+        return pathlib.Path.home() / "comfyui" / "models"
     return pathlib.Path(__file__).parent / "comfyui" / "models"
 
 
@@ -224,8 +224,8 @@ def ensure_models(filenames: set[str]) -> Iterator[DownloadEvent]:
     """Ensure each requested model is materialized in comfyui/models/<type>/.
 
     Local mode: hf_hub_download into the user's HF cache; symlink to comfyui/models/.
-    Spaces mode: hf_hub_download with cache_dir=/data; comfyui/models/ symlinks
-    point into /data.
+    Spaces mode: hf_hub_download with cache_dir under $HOME (no /data dependency);
+    files staged at ~/comfyui/models/<comfy_type>/<filename>.
 
     Files not in MODEL_REGISTRY are skipped (with a warning) — useful when the
     workflow has been manually customized with non-canonical filenames that the
