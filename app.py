@@ -42,9 +42,20 @@ CUSTOM_NODES_PINNED: list[tuple[str, str]] = [
 
 
 def _git_clone(url: str, dst: pathlib.Path, ref: str) -> None:
+    """Clone *url* at *ref* into *dst*. *ref* may be a branch, tag, or SHA.
+
+    `git clone --branch` only accepts branch/tag names, so we use init+fetch
+    which works for any object GitHub allows fetching (default: reachable
+    commits in public repos).
+    """
     import subprocess
 
-    subprocess.check_call(["git", "clone", "--depth", "1", "--branch", ref, url, str(dst)])
+    dst = pathlib.Path(dst)
+    dst.mkdir(parents=True, exist_ok=True)
+    subprocess.check_call(["git", "-C", str(dst), "init", "-q"])
+    subprocess.check_call(["git", "-C", str(dst), "remote", "add", "origin", url])
+    subprocess.check_call(["git", "-C", str(dst), "fetch", "--depth", "1", "origin", ref])
+    subprocess.check_call(["git", "-C", str(dst), "checkout", "-q", "FETCH_HEAD"])
 
 
 def _bootstrap() -> None:
