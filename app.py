@@ -357,12 +357,26 @@ def build_app() -> gr.Blocks:
                 outputs=[h["status"], h["video_out"]],
             )
 
-        # Sidebar mode buttons drive Tabs.selected via Gradio's update.
+        # JS to update the header mode tag without a server round-trip.
+        # Each mode button injects a tiny on-click that rewrites #aio-mode-tag
+        # and (on mobile) auto-collapses the drawer.
+        _MODE_TAG_BY_NAME = {
+            "t2v": "T2V", "a2v": "A2V", "i2v": "I2V",
+            "lipsync": "LIPSYNC", "keyframe": "KEY", "style": "STYLE",
+        }
         for name, btn in mode_buttons.items():
+            tag = _MODE_TAG_BY_NAME.get(name, name.upper())
             btn.click(
                 fn=lambda mode_id=name: gr.Tabs(selected=mode_id),
                 inputs=None,
                 outputs=[tabs_component],
+                js=f"() => {{ "
+                   f"const el = document.getElementById('aio-mode-tag'); "
+                   f"if (el) el.textContent = {tag!r}; "
+                   f"if (window.matchMedia('(max-width: 1023px)').matches) {{ "
+                   f"  const t = document.getElementById('aio-ham-toggle'); "
+                   f"  if (t) t.checked = false; "
+                   f"}} return []; }}",
             )
 
         # Sidebar model info wiring
