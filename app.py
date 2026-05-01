@@ -783,5 +783,21 @@ def _make_handler(mode_name: str, h: dict):
 
 
 if __name__ == "__main__":
+    # Gradio 5's file-access policy refuses to serve files outside cwd /
+    # tempdir / allowed_paths. ComfyUI writes generated videos to
+    # `<comfy_dir>/output/...` which is outside our cwd on Spaces, so
+    # whitelist that directory tree explicitly.
+    _on_spaces_at_launch = bool(os.environ.get("SPACES_ZERO_GPU"))
+    _comfy_dir_at_launch = (
+        (pathlib.Path.home() / "comfyui") if _on_spaces_at_launch
+        else pathlib.Path(__file__).parent / "comfyui"
+    )
+    _output_dir = _comfy_dir_at_launch / "output"
+    _output_dir.mkdir(parents=True, exist_ok=True)
+
     app = build_app()
-    app.launch(server_name="0.0.0.0", server_port=7860)
+    app.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        allowed_paths=[str(_output_dir)],
+    )
