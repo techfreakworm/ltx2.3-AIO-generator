@@ -162,42 +162,31 @@ LOADER_NODE_TYPES: tuple[str, ...] = (
 )
 
 
-def walk_workflow_for_models(workflow: dict) -> set[str]:
-    """Return the set of model filenames referenced by loader nodes in the workflow.
+_USER_INPUT_LOADERS = {"LoadImage", "VHS_LoadVideo", "VHS_LoadAudioUpload"}
+_MODEL_EXTS = (".safetensors", ".gguf", ".pt", ".bin", ".ckpt")
 
-    Pulls filenames from nodes whose `type` matches a known loader. Filenames are
-    typically in `widgets_values[0]` (CheckpointLoaderSimple) or in nested rows
-    (Power Lora Loader). Falls back to scanning all string-valued widget entries
-    for `*.safetensors` / `*.gguf`.
+
+def walk_workflow_for_models(workflow: dict) -> set[str]:
+    """Return the set of model filenames referenced by the API-format workflow.
+
+    Walks `{node_id: {class_type, inputs}}` looking for any input value that
+    ends in a model extension. Skips loaders that read user-supplied files
+    (LoadImage, VHS_LoadVideo, VHS_LoadAudioUpload). Unknown filenames are
+    harmless — `ensure_models` log-warns and skips anything not in the
+    registry, so being inclusive here costs nothing.
     """
     needed: set[str] = set()
-    for node in workflow.get("nodes", []):
-        if node.get("type") not in LOADER_NODE_TYPES:
+    for node in workflow.values():
+        if not isinstance(node, dict):
             continue
-        widgets = node.get("widgets_values") or []
-        for value in _flatten_widget_values(widgets):
-            if isinstance(value, str) and (
-                value.endswith(".safetensors")
-                or value.endswith(".gguf")
-                or value == "tokenizer.model"
-                or value.endswith(".json")
-            ):
+        if node.get("class_type") in _USER_INPUT_LOADERS:
+            continue
+        for value in (node.get("inputs") or {}).values():
+            if isinstance(value, str) and value.endswith(_MODEL_EXTS):
+                needed.add(value)
+            elif isinstance(value, str) and value == "tokenizer.model":
                 needed.add(value)
     return needed
-
-
-def _flatten_widget_values(values):
-    """Walk nested list/dict widget structures, yielding leaf values."""
-    if isinstance(values, dict):
-        yield from _flatten_widget_values(list(values.values()))
-        return
-    for v in values:
-        if isinstance(v, (list, tuple)):
-            yield from _flatten_widget_values(v)
-        elif isinstance(v, dict):
-            yield from _flatten_widget_values(list(v.values()))
-        else:
-            yield v
 
 
 @dataclass
