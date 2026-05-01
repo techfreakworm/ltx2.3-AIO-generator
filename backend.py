@@ -71,14 +71,35 @@ _GPU = spaces.GPU(duration=300) if (spaces is not None and _on_spaces()) else _i
 
 
 @_GPU
-def _execute_workflow(executor: Any, workflow: dict, output_ids: list[str]) -> dict:
+def _execute_workflow(executor: Any, workflow: dict, output_ids: list[str]) -> str:
+    """Run the workflow on GPU and return the path of the first video output.
+
+    Returns just the video path (a plain string, picklable across the
+    @spaces.GPU subprocess boundary). Returning the full history_result dict
+    was unreliable on Spaces — under ZeroGPU's GPU-context wrapping, the
+    parent process didn't see the executor's mutated state, so video_path
+    came back empty even when the file was on disk.
+    """
     executor.execute(
         workflow,
         prompt_id="ltx23-aio",
         extra_data={"client_id": "ltx23-aio"},
         execute_outputs=output_ids,
     )
-    return getattr(executor, "history_result", {}) or {}
+    hist = getattr(executor, "history_result", {}) or {}
+    outs = hist.get("outputs") or {}
+    for output in outs.values():
+        if not isinstance(output, dict):
+            continue
+        for value in output.values():
+            if not isinstance(value, list):
+                continue
+            for item in value:
+                if isinstance(item, dict):
+                    fn = item.get("filename") or ""
+                    if fn.endswith((".mp4", ".webm", ".mov")):
+                        return item.get("fullpath") or fn
+    return ""
 
 
 class _StubServer:
@@ -340,10 +361,20 @@ class ComfyUILibraryBackend:
                 # _execute_workflow is module-level and decorated with
                 # @spaces.GPU(duration=300) on Spaces — that's what makes the
                 # heavy compute run on a borrowed H200. Off-Spaces it's a
-                # plain call.
-                hist = _execute_workflow(self._executor, workflow, output_ids)
-                outs = hist.get("outputs") or {}
-                video_path = _first_video_path(list(outs.values())) or ""
+                # plain call. Returns the video path directly (computed
+                # inside the GPU context so the executor's history is fresh).
+                video_path = _execute_workflow(self._executor, workflow, output_ids)
+                # Fallback: if history_result didn't surface a path (rare on
+                # Spaces — happens when ZeroGPU's subprocess boundary drops
+                # mutated state), scan the output dir for the newest mp4
+                # written within the last 60 s.
+                if not video_path:
+                    video_path = _newest_recent_video(self._comfy_dir / "output") or ""
+                print(
+                    f"[backend] workflow done; video_path={video_path!r}",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 _push(OutputEvent(video_path=video_path))
             except Exception as exc:
                 tb_text = tb_mod.format_exc()
@@ -412,16 +443,29 @@ def _free_memory() -> None:
         pass
 
 
-def _first_video_path(outputs: Iterable) -> str | None:
-    """Find the first .mp4 path emitted by VHS_VideoCombine in PromptExecutor outputs."""
-    for output in outputs:
-        if not isinstance(output, dict):
-            continue
-        for value in output.values():
-            if isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict) and "filename" in item:
-                        fn = item["filename"]
-                        if fn.endswith((".mp4", ".webm", ".mov")):
-                            return item.get("fullpath", fn)
-    return None
+def _newest_recent_video(output_root: pathlib.Path, within_seconds: float = 60.0) -> str | None:
+    """Filesystem fallback: return the newest .mp4/.webm/.mov under *output_root*
+    that was modified within the last *within_seconds* seconds.
+
+    Used when the executor's history_result didn't surface a path — typically
+    happens when ZeroGPU's subprocess boundary drops the mutation. The disk
+    is shared, so the file is there even when the in-memory state isn't.
+    """
+    import time
+
+    if not output_root.exists():
+        return None
+    cutoff = time.time() - within_seconds
+    candidates: list[tuple[float, pathlib.Path]] = []
+    for ext in (".mp4", ".webm", ".mov"):
+        for p in output_root.rglob(f"*{ext}"):
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                continue
+            if mtime >= cutoff:
+                candidates.append((mtime, p))
+    if not candidates:
+        return None
+    candidates.sort(reverse=True)
+    return str(candidates[0][1])
