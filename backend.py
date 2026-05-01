@@ -53,6 +53,34 @@ def _on_spaces() -> bool:
     return bool(os.environ.get("SPACES_ZERO_GPU"))
 
 
+try:
+    import spaces  # type: ignore
+except ImportError:
+    spaces = None  # type: ignore[assignment]
+
+
+def _identity(fn):
+    return fn
+
+
+# ZeroGPU's startup detector scans loaded modules for spaces.GPU-wrapped
+# functions. The decorator must be applied at module load time — runtime
+# wrapping inside a request handler isn't detected. Pro tier per-call cap is
+# 300s, so we use that ceiling and let modes finish whenever they finish.
+_GPU = spaces.GPU(duration=300) if (spaces is not None and _on_spaces()) else _identity
+
+
+@_GPU
+def _execute_workflow(executor: Any, workflow: dict, output_ids: list[str]) -> dict:
+    executor.execute(
+        workflow,
+        prompt_id="ltx23-aio",
+        extra_data={"client_id": "ltx23-aio"},
+        execute_outputs=output_ids,
+    )
+    return getattr(executor, "history_result", {}) or {}
+
+
 class _StubServer:
     """Minimal stub matching the surface ComfyUI's PromptExecutor expects."""
 
@@ -239,7 +267,7 @@ class ComfyUILibraryBackend:
         return f"ComfyUILibraryBackend(comfy_dir={self._comfy_dir!r})"
 
     async def submit(
-        self, mode: str, workflow: dict, gpu_duration: int = 120
+        self, mode: str, workflow: dict, gpu_duration: int = 300
     ) -> AsyncIterator[Any]:
         """Run a workflow end-to-end. Yields Download/Progress/Output/Error events."""
         # Pre-flight: ensure all model files exist.
@@ -309,17 +337,11 @@ class ComfyUILibraryBackend:
                 # Use the public setter; it writes the same global the
                 # ProgressBar class reads, but is the documented API.
                 comfy.utils.set_progress_bar_global_hook(_hook)
-                self._executor.execute(
-                    workflow,
-                    prompt_id="ltx23-aio",
-                    extra_data={"client_id": "ltx23-aio"},
-                    execute_outputs=output_ids,
-                )
-                # PromptExecutor stores per-node UI info in history_result["outputs"]
-                # after execute_async. Each entry mirrors what the JS frontend
-                # would receive — including SaveVideo's "filenames"/"video" lists
-                # that point at the saved file inside ComfyUI's output dir.
-                hist = getattr(self._executor, "history_result", {}) or {}
+                # _execute_workflow is module-level and decorated with
+                # @spaces.GPU(duration=300) on Spaces — that's what makes the
+                # heavy compute run on a borrowed H200. Off-Spaces it's a
+                # plain call.
+                hist = _execute_workflow(self._executor, workflow, output_ids)
                 outs = hist.get("outputs") or {}
                 video_path = _first_video_path(list(outs.values())) or ""
                 _push(OutputEvent(video_path=video_path))
@@ -338,13 +360,7 @@ class ComfyUILibraryBackend:
                 _free_memory()
                 _push(None)  # sentinel: stop the consumer
 
-        if _on_spaces():
-            import spaces
-
-            execute = spaces.GPU(duration=gpu_duration)(_worker)
-            thread = threading.Thread(target=execute, daemon=True)
-        else:
-            thread = threading.Thread(target=_worker, daemon=True)
+        thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
 
         while True:
