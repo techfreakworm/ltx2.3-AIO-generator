@@ -5,7 +5,10 @@ psutil  # used by app.py model status badge
 
 torch>=2.4.0
 torchvision
-torchaudio
+# HF Spaces ships torch==2.10.0; bare 'torchaudio' lets pip pick an older
+# wheel whose C++ ABI doesn't match → import crashes the whole audio code
+# path including ComfyUI-LTXVideo's audio VAE. Pin the matching version.
+torchaudio==2.10.0
 numpy
 Pillow
 einops
