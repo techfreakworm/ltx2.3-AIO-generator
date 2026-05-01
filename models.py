@@ -64,11 +64,16 @@ MODEL_REGISTRY: dict[str, ModelEntry] = {
         comfy_type="text_encoders",
         subfolder="gemma-3-12b-it",
     ),
-    # Kijai's LTX 2.3 ComfyUI assets
-    "LTX23_video_vae_bf16.safetensors": ModelEntry("Kijai/LTX2.3_comfy", comfy_type="vae"),
-    "LTX23_audio_vae_bf16.safetensors": ModelEntry("Kijai/LTX2.3_comfy", comfy_type="vae"),
+    # Kijai's LTX 2.3 ComfyUI assets — files live in vae/ and text_encoders/
+    # subfolders within the repo, not at root.
+    "LTX23_video_vae_bf16.safetensors": ModelEntry(
+        "Kijai/LTX2.3_comfy", subfolder="vae", comfy_type="vae"
+    ),
+    "LTX23_audio_vae_bf16.safetensors": ModelEntry(
+        "Kijai/LTX2.3_comfy", subfolder="vae", comfy_type="vae"
+    ),
     "ltx-2.3_text_projection_bf16.safetensors": ModelEntry(
-        "Kijai/LTX2.3_comfy", comfy_type="text_encoders"
+        "Kijai/LTX2.3_comfy", subfolder="text_encoders", comfy_type="text_encoders"
     ),
     # IC-LoRAs
     "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors": ModelEntry(
@@ -270,8 +275,21 @@ def ensure_models(filenames: set[str]) -> Iterator[DownloadEvent]:
         except Exception as exc:
             # Fall back to scanning the cache for a matching file (test mode +
             # offline mode). Look for either the workflow filename OR the
-            # HF-side filename — both might exist locally as symlinks.
-            candidates = list(cache_dir.rglob(filename)) or list(cache_dir.rglob(hf_filename))
+            # HF-side filename. Skip `.no_exist/` markers and 0-byte stubs —
+            # the HF lib leaves those after a 404, and symlinking them past
+            # safetensors yields a confusing "header too small" error
+            # downstream.
+            def _viable(path):
+                try:
+                    return ".no_exist" not in path.parts and path.stat().st_size > 64
+                except OSError:
+                    return False
+
+            candidates = [
+                p for p in cache_dir.rglob(filename) if _viable(p)
+            ] or [
+                p for p in cache_dir.rglob(hf_filename) if _viable(p)
+            ]
             if not candidates:
                 logger.warning(
                     "could not download or locate %r (hf=%r) in HF cache: %s; skipping",
