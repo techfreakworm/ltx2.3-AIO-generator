@@ -183,7 +183,7 @@ _CUSTOM_CSS = """
     background: #12161B;
     padding: 14px 10px !important;
     flex-shrink: 0;
-    transition: transform 0.2s ease;
+    transition: left 0.2s ease;
 }
 .aio-drawer-heading {
     font-family: 'IBM Plex Mono', ui-monospace, monospace;
@@ -237,15 +237,16 @@ _CUSTOM_CSS = """
     .aio-ham-label { display: flex; }
     .aio-drawer {
         position: fixed;
-        top: 0; left: 0; bottom: 0;
+        top: 0; bottom: 0;
+        left: -100%;
         z-index: 10;
         box-shadow: 4px 0 24px rgba(0,0,0,0.6);
-        transform: translateX(-100%);
         max-width: 80vw;
+        overflow: hidden;
     }
     /* checkbox at #aio-ham-toggle is the only sibling pattern Gradio
        lets us reach without JS — when checked, slide drawer in. */
-    body:has(#aio-ham-toggle:checked) .aio-drawer { transform: translateX(0); }
+    body:has(#aio-ham-toggle:checked) .aio-drawer { left: 0; }
     body:has(#aio-ham-toggle:checked) .aio-shell::before {
         content: ""; position: fixed; inset: 0;
         background: rgba(0,0,0,0.55); z-index: 9;
