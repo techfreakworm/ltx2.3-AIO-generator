@@ -1,5 +1,5 @@
 ---
-title: LTX 2.3 All-in-One Video Generator
+title: LTX 2.3 Studio
 emoji: 🎬
 colorFrom: purple
 colorTo: blue
