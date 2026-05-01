@@ -52,6 +52,7 @@ def _bootstrap() -> None:
     comfy_dir = pathlib.Path("/data/comfyui" if on_spaces else "comfyui")
 
     if on_spaces and not comfy_dir.exists():
+        print(f"[bootstrap] cold start on Spaces; cloning ComfyUI to {comfy_dir}", flush=True)
         comfy_dir.parent.mkdir(parents=True, exist_ok=True)
         _git_clone(COMFYUI_REPO, comfy_dir, ref=COMFYUI_COMMIT)
         for node_url, node_ref in CUSTOM_NODES_PINNED:
@@ -59,10 +60,16 @@ def _bootstrap() -> None:
             _git_clone(node_url, comfy_dir / "custom_nodes" / name, ref=node_ref)
         import subprocess
 
-        for cn in (comfy_dir / "custom_nodes").iterdir():
-            req = cn / "requirements.txt"
-            if req.exists():
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(req)])
+        # ComfyUI core requirements + each custom node's requirements
+        for req_path in [
+            comfy_dir / "requirements.txt",
+            *(cn / "requirements.txt" for cn in (comfy_dir / "custom_nodes").iterdir()),
+        ]:
+            if req_path.exists():
+                print(f"[bootstrap] pip install -r {req_path}", flush=True)
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", "--quiet", "-r", str(req_path)]
+                )
 
     if str(comfy_dir) not in sys.path:
         sys.path.insert(0, str(comfy_dir))
@@ -70,6 +77,26 @@ def _bootstrap() -> None:
         "COMFY_MODELS_DIR",
         str(pathlib.Path("/data/models") if on_spaces else (comfy_dir / "models")),
     )
+
+    # Stage placeholder input files so the workflow's hard-referenced loaders
+    # (LoadImage/VHS_Load*) don't error at runtime even when the active mode
+    # doesn't actually use the file. Real user uploads are placed alongside via
+    # `_stage_to_comfy_input` later.
+    seed_dir = pathlib.Path(__file__).parent / "assets" / "seed_inputs"
+    inputs_dir = comfy_dir / "input"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    if seed_dir.exists():
+        import shutil
+
+        for src in seed_dir.iterdir():
+            if not src.is_file():
+                continue
+            dst = inputs_dir / src.name
+            if not dst.exists():
+                try:
+                    shutil.copy2(src, dst)
+                except OSError as exc:
+                    print(f"[bootstrap] could not seed {src.name}: {exc}", flush=True)
 
 
 _bootstrap()

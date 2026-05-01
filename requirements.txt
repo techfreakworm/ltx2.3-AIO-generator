@@ -1,6 +1,8 @@
 gradio>=5.0,<6.0
 spaces>=0.30.0
 huggingface_hub>=0.27.0
+psutil  # used by app.py model status badge
+
 torch>=2.4.0
 torchvision
 torchaudio
@@ -9,6 +11,43 @@ Pillow
 einops
 safetensors
 tqdm
+
+# ComfyUI core requirements (also pip-installed by setup.sh from comfyui/requirements.txt
+# locally, but Spaces won't run setup.sh — these are the deps ComfyUI itself needs)
+transformers>=4.50,<6
+tokenizers
+sentencepiece
+av
+kornia
+spandrel
+torchsde
+scipy
+aiohttp
+pydantic
+pydantic-settings
+python-dotenv
+yarl
+PyOpenGL
+glfw
+SQLAlchemy
+alembic
+Mako
+networkx
+sympy
+mpmath
+blake3
+comfyui-frontend-package>=1.42
+comfyui-workflow-templates>=0.9
+comfyui-embedded-docs
+
+# Custom-node deps that we discovered are required for the LTX 2.3 workflow
+# but aren't auto-installed by their respective nodes' requirements.txt.
+gguf  # ComfyUI-GGUF (UnetLoaderGGUF)
+imageio_ffmpeg  # ComfyUI-VideoHelperSuite (video write/read backend)
+opencv-python  # ComfyUI_LayerStyle, multiple custom nodes
+matplotlib  # comfyui_controlnet_aux dwpose / pose preprocessors
+diffusers  # ComfyUI-SeedVR2 (used during init even when the node isn't called)
+yt-dlp  # ComfyUI-MediaMixer (init-time import)
 
 # Dev / test
 pytest>=8.0
