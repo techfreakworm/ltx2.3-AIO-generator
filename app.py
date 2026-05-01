@@ -146,6 +146,8 @@ _CUSTOM_CSS = """
     padding: 11px 18px;
     border-bottom: 1px solid #262C35;
     background: #12161B;
+    position: relative;
+    z-index: 11;
 }
 .aio-ham-label {
     display: none;
@@ -249,7 +251,9 @@ _CUSTOM_CSS = """
     .aio-shell.drawer-open .aio-drawer { left: 0; }
     .aio-shell.drawer-open::before {
         content: ""; position: fixed; inset: 0;
-        background: rgba(0,0,0,0.55); z-index: 9;
+        background: rgba(0,0,0,0.75); z-index: 9;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
     }
 
     /* Mobile sub-tweaks */
@@ -310,17 +314,29 @@ _TOPAZ_THEME = gr.themes.Base(
 
 def build_app() -> gr.Blocks:
     with gr.Blocks(theme=_TOPAZ_THEME, title="LTX 2.3 Studio", css=_CUSTOM_CSS) as app:
-        # Header: hamburger button toggles `.drawer-open` class on `.aio-shell`
-        # via inline JS (Gradio prefixes user CSS so `body:has(:checked)` breaks).
+        # Header: hamburger button toggles `.drawer-open` on `.aio-shell`.
+        # The script also installs a once-only click-outside dismisser so tapping
+        # the scrim, header, or any non-drawer element closes the drawer.
         gr.HTML(
             '<div class="aio-header">'
             '  <button type="button" class="aio-ham-label" '
-            '          onclick="document.querySelector(\'.aio-shell\')'
-            '?.classList.toggle(\'drawer-open\')" '
-            '          aria-label="Toggle navigation">≡</button>'
+            '          onclick="(function(b){var s=document.querySelector(\'.aio-shell\');'
+            'var o=s.classList.toggle(\'drawer-open\');'
+            'b.textContent=o?\'\\u00d7\':\'\\u2261\';'
+            'b.setAttribute(\'aria-expanded\',o?\'true\':\'false\');})(this)" '
+            '          aria-expanded="false" aria-label="Toggle navigation">≡</button>'
             '  <span class="aio-title">LTX 2.3 <span class="accent">Studio</span></span>'
             '  <span class="aio-mode-tag" id="aio-mode-tag">T2V</span>'
             '</div>'
+            '<script>(function(){if(window._aioDismiss)return;window._aioDismiss=true;'
+            'document.addEventListener("click",function(e){'
+            'var s=document.querySelector(".aio-shell");'
+            'if(!s||!s.classList.contains("drawer-open"))return;'
+            'if(e.target.closest(".aio-drawer")||e.target.closest(".aio-ham-label"))return;'
+            's.classList.remove("drawer-open");'
+            'var b=document.querySelector(".aio-ham-label");'
+            'if(b){b.textContent="\\u2261";b.setAttribute("aria-expanded","false");}'
+            '});})();</script>'
         )
 
         with gr.Row(elem_classes=["aio-shell"]):
