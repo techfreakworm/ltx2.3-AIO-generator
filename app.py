@@ -308,33 +308,43 @@ _TOPAZ_THEME = gr.themes.Base(
 
 def build_app() -> gr.Blocks:
     with gr.Blocks(theme=_TOPAZ_THEME, title="LTX 2.3 Studio", css=_CUSTOM_CSS) as app:
-        gr.Markdown("# ⚡ LTX 2.3 All-in-One")
+        # Header: hamburger checkbox (drives drawer via :checked + :has() in CSS),
+        # title, current-mode tag.
+        gr.HTML(
+            '<div class="aio-header">'
+            '  <input type="checkbox" id="aio-ham-toggle" class="aio-ham-toggle">'
+            '  <label for="aio-ham-toggle" class="aio-ham-label">≡</label>'
+            '  <span class="aio-title">LTX 2.3 <span class="accent">Studio</span></span>'
+            '  <span class="aio-mode-tag" id="aio-mode-tag">T2V</span>'
+            '</div>'
+        )
 
         with gr.Row(elem_classes=["aio-shell"]):
-            # Sidebar
-            with gr.Column(scale=1, min_width=200, elem_classes=["aio-sidebar"]):
-                gr.Markdown("**Modes**", elem_classes=["aio-sidebar-heading"])
-                with gr.Column(elem_classes=["aio-mode-btn-row"]):
-                    mode_buttons = {
-                        name: gr.Button(
-                            f"{m.icon}  {m.label}",
-                            elem_classes=["aio-mode-btn"],
-                            variant="secondary",
-                        )
-                        for name, m in modes.MODE_REGISTRY.items()
-                    }
-                gr.Markdown("**Models**", elem_classes=["aio-sidebar-heading"])
+            # Drawer (drawer behaves as fixed sidebar ≥1024 px;
+            # absolute-positioned overlay <1024 px — see _CUSTOM_CSS).
+            with gr.Column(scale=1, min_width=200, elem_classes=["aio-drawer"]):
+                gr.Markdown("Modes", elem_classes=["aio-drawer-heading"])
+                mode_buttons = {
+                    name: gr.Button(
+                        f"{m.icon}  {m.label}",
+                        elem_classes=["aio-mode-btn"],
+                        variant="secondary",
+                    )
+                    for name, m in modes.MODE_REGISTRY.items()
+                }
+                gr.Markdown("Models", elem_classes=["aio-drawer-heading"])
                 model_status = gr.HTML(_render_model_status_idle(), elem_id="aio-model-status")
                 refresh_btn = gr.Button("Refresh", size="sm", variant="secondary")
                 unload_btn = gr.Button("Unload all models", size="sm", variant="secondary")
-                gr.Markdown("**Settings**", elem_classes=["aio-sidebar-heading"])
+                gr.Markdown("Settings", elem_classes=["aio-drawer-heading"])
                 gr.Markdown(
                     "Output: `comfyui/output/LTX2.3/`<br>"
-                    "Set `LTX23_AIO_VRAM=lowvram|normalvram|highvram` to override the auto-detected VRAM tier.",
+                    "Set `LTX23_AIO_VRAM=lowvram|normalvram|highvram` to override "
+                    "the auto-detected VRAM tier.",
                     elem_classes=["aio-model-badge"],
                 )
 
-            # Body
+            # Body — unchanged, still hosts the 6 mode tabs.
             with gr.Column(scale=4, elem_classes=["aio-body"]):
                 handles, tabs_component = _render_mode_panels()
 
