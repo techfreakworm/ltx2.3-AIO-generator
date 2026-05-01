@@ -125,8 +125,7 @@ _bootstrap()
 # ---------------------------------------------------------------------------
 
 _CUSTOM_CSS = """
-/* Hide the top tab strip from view, but keep it in the DOM and clickable so
-   the sidebar buttons can drive selection via programmatic click. */
+/* Hide Gradio's top tab strip — sidebar drives selection. */
 .aio-tabs > .tab-nav,
 .aio-tabs > div:first-child[role="tablist"],
 .aio-tabs > div:first-child:has([role="tab"]) {
@@ -139,45 +138,126 @@ _CUSTOM_CSS = """
     pointer-events: auto !important;
 }
 
-/* Sidebar nav buttons */
-.aio-mode-btn { width: 100%; text-align: left; margin: 2px 0; }
-.aio-mode-btn-active { background: rgba(110,168,254,0.15) !important; border-left: 3px solid #6ea8fe !important; }
-
-/* Sidebar headings */
-.aio-sidebar-heading { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.6; margin-top: 16px !important; margin-bottom: 4px !important; }
-
-/* Status banner */
-.status-card { padding: 14px 16px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
-.status-row { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
-.status-stage { font-weight: 600; }
-.status-meta { font-size: 12px; opacity: 0.75; }
-.status-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; }
-.status-fill { height: 100%; background: linear-gradient(90deg,#6ea8fe,#8de9fe); transition: width .3s; }
-.status-mem { font-size: 11px; opacity: 0.6; margin-top: 6px; font-family: ui-monospace, monospace; }
-.status-error { background: rgba(255,90,90,0.08); border-color: rgba(255,90,90,0.25); }
-
-/* Model status badge */
-.aio-model-badge { padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.04); font-size: 11.5px; font-family: ui-monospace, monospace; opacity: 0.85; }
-
-/* Responsive: tablet */
-@media (max-width: 1024px) {
-    .aio-sidebar { min-width: 160px !important; }
-    .aio-mode-btn { font-size: 13px !important; padding: 6px 10px !important; }
+/* === Header === */
+.aio-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 18px;
+    border-bottom: 1px solid #262C35;
+    background: #12161B;
+}
+.aio-ham-toggle { display: none; }  /* hidden checkbox drives drawer state */
+.aio-ham-label {
+    width: 32px; height: 32px;
+    border: 1px solid #262C35;
+    border-radius: 5px;
+    color: #7C8693;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 300;
+    user-select: none;
+}
+.aio-ham-label:hover { color: #E0A458; border-color: #E0A458; }
+.aio-title {
+    font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+    color: #E6E8EB;
+}
+.aio-title .accent { color: #E0A458; }
+.aio-mode-tag {
+    margin-left: auto;
+    padding: 4px 9px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.04em;
+    color: #E0A458;
+    border: 1px solid #E0A458;
+    border-radius: 4px;
 }
 
-/* Responsive: mobile — sidebar collapses to top, single column body */
-@media (max-width: 700px) {
-    .aio-shell { flex-direction: column !important; }
-    .aio-sidebar { width: 100% !important; min-width: unset !important; padding: 0 !important; }
-    .aio-body { width: 100% !important; }
-    .aio-mode-btn-row { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; padding: 8px !important; }
-    .aio-mode-btn { width: 100% !important; font-size: 12.5px !important; padding: 8px !important; text-align: center !important; margin: 0 !important; }
-    .aio-sidebar-heading { font-size: 10px !important; margin: 12px 0 4px !important; padding: 0 8px !important; }
-    .aio-model-badge { margin: 0 8px !important; word-break: break-word; white-space: normal !important; }
-    /* sliders + side-by-side rows: stack vertically on mobile so each value
-       gets its own width budget */
-    .aio-body .form > div, .aio-body [class*="row"] > div { flex: 1 1 100% !important; min-width: 0 !important; }
+/* === Drawer === */
+.aio-shell { position: relative; }
+.aio-drawer {
+    width: 220px;
+    border-right: 1px solid #262C35;
+    background: #12161B;
+    padding: 14px 10px !important;
+    flex-shrink: 0;
+    transition: transform 0.2s ease, width 0.2s ease;
+}
+.aio-drawer-heading {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: #7C8693;
+    padding: 6px 8px 4px !important;
+    margin: 0 !important;
+}
+
+/* Mode buttons */
+.aio-mode-btn { width: 100%; text-align: left; margin: 2px 0 !important; }
+.aio-mode-btn-active {
+    background: #1A1F26 !important;
+    color: #E0A458 !important;
+    border-left: 3px solid #E0A458 !important;
+}
+
+/* Model status / settings panels */
+.aio-model-badge {
+    padding: 9px 11px;
+    border-radius: 6px;
+    background: #1A1F26;
+    border: 1px solid #262C35;
+    font-size: 11.5px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    color: #7C8693;
+}
+
+/* === Status banner === */
+.status-card {
+    padding: 12px 16px;
+    border-radius: 6px;
+    background: #1A1F26;
+    border: 1px solid #262C35;
+}
+.status-row { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.status-stage { font-weight: 600; color: #E0A458; }
+.status-meta { font-size: 12px; color: #7C8693; font-family: 'IBM Plex Mono', monospace; }
+.status-bar { height: 4px; background: #262C35; border-radius: 99px; overflow: hidden; }
+.status-fill { height: 100%; background: #E0A458; transition: width .3s; }
+.status-mem { font-size: 11px; color: #7C8693; margin-top: 6px; font-family: 'IBM Plex Mono', monospace; }
+.status-error {
+    background: #3A1E20 !important;
+    border-color: #F4A6A8 !important;
+    color: #F4A6A8 !important;
+}
+.status-error .status-stage { color: #F4A6A8; }
+
+/* === Drawer toggle behavior at the desktop boundary === */
+@media (max-width: 1023px) {
+    .aio-ham-label { display: flex; }
+    .aio-drawer {
+        position: absolute;
+        top: 0; left: 0; bottom: 0;
+        z-index: 10;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.6);
+        transform: translateX(-100%);
+        max-width: 80vw;
+    }
+    /* checkbox at #aio-ham-toggle is the only sibling pattern Gradio
+       lets us reach without JS — when checked, slide drawer in. */
+    body:has(.aio-ham-toggle:checked) .aio-drawer { transform: translateX(0); }
+    body:has(.aio-ham-toggle:checked) .aio-shell::before {
+        content: ""; position: absolute; inset: 0;
+        background: rgba(0,0,0,0.55); z-index: 9;
+    }
+
+    /* Mobile sub-tweaks */
+    .aio-mode-btn { font-size: 13px !important; padding: 7px 10px !important; }
     .aio-body [class*="row"] { flex-wrap: wrap !important; }
+    .aio-body [class*="row"] > div { flex: 1 1 100% !important; min-width: 0 !important; }
+}
+
+@media (min-width: 1024px) {
+    .aio-ham-label { display: none; }
 }
 """
 
