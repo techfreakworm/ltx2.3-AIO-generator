@@ -147,7 +147,6 @@ _CUSTOM_CSS = """
     border-bottom: 1px solid #262C35;
     background: #12161B;
 }
-.aio-ham-toggle { display: none; }  /* hidden checkbox drives drawer state */
 .aio-ham-label {
     display: none;
     width: 32px; height: 32px;
@@ -244,10 +243,11 @@ _CUSTOM_CSS = """
         max-width: 80vw;
         overflow: hidden;
     }
-    /* checkbox at #aio-ham-toggle is the only sibling pattern Gradio
-       lets us reach without JS — when checked, slide drawer in. */
-    body:has(#aio-ham-toggle:checked) .aio-drawer { left: 0; }
-    body:has(#aio-ham-toggle:checked) .aio-shell::before {
+    /* `.aio-shell.drawer-open` is toggled by the hamburger's inline JS.
+       `body:has(:checked)` would be cleaner but Gradio prefixes user CSS
+       with `.gradio-container .contain `, breaking ancestor selectors. */
+    .aio-shell.drawer-open .aio-drawer { left: 0; }
+    .aio-shell.drawer-open::before {
         content: ""; position: fixed; inset: 0;
         background: rgba(0,0,0,0.55); z-index: 9;
     }
@@ -310,12 +310,14 @@ _TOPAZ_THEME = gr.themes.Base(
 
 def build_app() -> gr.Blocks:
     with gr.Blocks(theme=_TOPAZ_THEME, title="LTX 2.3 Studio", css=_CUSTOM_CSS) as app:
-        # Header: hamburger checkbox (drives drawer via :checked + :has() in CSS),
-        # title, current-mode tag.
+        # Header: hamburger button toggles `.drawer-open` class on `.aio-shell`
+        # via inline JS (Gradio prefixes user CSS so `body:has(:checked)` breaks).
         gr.HTML(
             '<div class="aio-header">'
-            '  <input type="checkbox" id="aio-ham-toggle" class="aio-ham-toggle">'
-            '  <label for="aio-ham-toggle" class="aio-ham-label">≡</label>'
+            '  <button type="button" class="aio-ham-label" '
+            '          onclick="document.querySelector(\'.aio-shell\')'
+            '?.classList.toggle(\'drawer-open\')" '
+            '          aria-label="Toggle navigation">≡</button>'
             '  <span class="aio-title">LTX 2.3 <span class="accent">Studio</span></span>'
             '  <span class="aio-mode-tag" id="aio-mode-tag">T2V</span>'
             '</div>'
@@ -376,8 +378,7 @@ def build_app() -> gr.Blocks:
                    f"const el = document.getElementById('aio-mode-tag'); "
                    f"if (el) el.textContent = {tag!r}; "
                    f"if (window.matchMedia('(max-width: 1023px)').matches) {{ "
-                   f"  const t = document.getElementById('aio-ham-toggle'); "
-                   f"  if (t) t.checked = false; "
+                   f"  document.querySelector('.aio-shell')?.classList.remove('drawer-open'); "
                    f"}} return []; }}",
             )
 
