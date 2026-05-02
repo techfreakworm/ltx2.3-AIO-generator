@@ -42,6 +42,7 @@ CUSTOM_NODES_PINNED: list[tuple[str, str]] = [
     ("https://github.com/Fannovel16/comfyui_controlnet_aux.git", "e8b689a513c3e6b63edc44066560ca5919c0576e"),
     ("https://github.com/evanspearman/ComfyMath.git", "c01177221c31b8e5fbc062778fc8254aeb541638"),
     ("https://github.com/Smirnov75/ComfyUI-mxToolkit.git", "7f7a0e584f12078a1c589645d866ae96bad0cc35"),
+    ("https://github.com/DoctorDiffusion/ComfyUI-MediaMixer.git", "2bae7b5ea8fc52d8a4d668d62fed76265f4eec2c"),
 ]
 
 
