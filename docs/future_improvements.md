@@ -6,25 +6,24 @@ not commitment.
 
 ## Spaces / preload
 
-### 1. Stop preloading models that aren't referenced by any workflow
+### ~~1. Stop preloading models that aren't referenced by any workflow~~ — DONE 2026-05-02
 
-Audit on 2026-05-02 (`tools/audit-models` style script) showed two `Lightricks/LTX-2.3`
-files in `preload_from_hub` that aren't actually referenced by any workflow JSON
-we ship:
+Audit on 2026-05-02 showed two `Lightricks/LTX-2.3` files in `preload_from_hub`
+that aren't actually referenced by any workflow JSON we ship:
 
 - `ltx-2.3-22b-dev.safetensors` (~42 GB)
 - `ltx-2.3-22b-distilled.safetensors` (~42 GB)
 
-The active path uses `Kijai/LTX2.3_comfy diffusion_models/ltx-2.3-22b-dev_transformer_only_bf16.safetensors`.
-Removing both saves ~84 GB of preload bandwidth/storage. Risk: if a future
-workflow update reintroduces the Lightricks-side filenames, lazy download
-takes over (slow first inference) — acceptable for the tradeoff.
+The active path uses `Kijai/LTX2.3_comfy ltx-2.3-22b-dev_transformer_only_bf16.safetensors`.
+Removed both — ~84 GB saved. Forced by HF eviction with `storage limit
+exceeded (150G)` when total preload was ~234 GB. Risk: if a future workflow
+update reintroduces the Lightricks-side filenames, lazy download takes over.
 
-### 2. Drop `unsloth/LTX-2.3-GGUF` from preload (~39 GB)
+### ~~2. Drop `unsloth/LTX-2.3-GGUF` from preload (~39 GB)~~ — DONE 2026-05-02
 
-The GGUF transformer is the low-VRAM alternative. ZeroGPU H200 has 70 GB so
-the BF16 transformer always fits. Lazy-load when a future "Low VRAM" preset
-actually wires the GGUF path.
+Removed alongside (1). GGUF transformer is the low-VRAM alternative; ZeroGPU
+H200 has 70 GB so the BF16 transformer always fits. Lazy-loads on first use
+of any preset that wires the GGUF path.
 
 ### 3. Drop the `Lightricks/LTX-2-19b-LoRA-Camera-Control-Static/Jib-Up/Jib-Down` preload
 

@@ -16,10 +16,9 @@ preload_from_hub:
   - Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Down ltx-2-19b-lora-camera-control-jib-down.safetensors
   - Lightricks/LTX-2-19b-LoRA-Camera-Control-Jib-Up ltx-2-19b-lora-camera-control-jib-up.safetensors
   - Lightricks/LTX-2-19b-LoRA-Camera-Control-Static ltx-2-19b-lora-camera-control-static.safetensors
-  - Lightricks/LTX-2.3 ltx-2.3-22b-dev.safetensors,ltx-2.3-22b-distilled-lora-384.safetensors,ltx-2.3-22b-distilled.safetensors,ltx-2.3-spatial-upscaler-x2-1.0.safetensors
+  - Lightricks/LTX-2.3 ltx-2.3-22b-distilled-lora-384.safetensors,ltx-2.3-spatial-upscaler-x2-1.0.safetensors
   - Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
   - google/gemma-3-12b-it-qat-q4_0-unquantized gemma-3-12b-it/model-00001-of-00005.safetensors,gemma-3-12b-it/model-00002-of-00005.safetensors,gemma-3-12b-it/model-00003-of-00005.safetensors,gemma-3-12b-it/model-00004-of-00005.safetensors,gemma-3-12b-it/model-00005-of-00005.safetensors,gemma-3-12b-it/model.safetensors.index.json,gemma-3-12b-it/preprocessor_config.json,gemma-3-12b-it/tokenizer.model
-  - unsloth/LTX-2.3-GGUF ltx-2.3-22b-dev-BF16.gguf
 ---
 
 # LTX 2.3 All-in-One Video Generator
