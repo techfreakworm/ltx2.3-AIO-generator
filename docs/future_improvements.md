@@ -6,6 +6,25 @@ not commitment.
 
 ## Spaces / preload
 
+### ~~0. Re-enable `preload_from_hub` via runtime cache mirror~~ — DONE 2026-05-02
+
+Initial preload deployment failed because HF's build pipeline writes
+`~/.cache/huggingface/` as the build user, leaving it read-only for runtime
+user 1000. Lazy `hf_hub_download` for non-preloaded files (GGUF, camera LoRAs)
+failed with `Permission denied (os error 13)`. `chmod` couldn't help — we
+don't own the inode.
+
+Fix landed in `_bootstrap()`'s `_mirror_preload_hf_cache()`:
+- Walks `~/.cache/huggingface/` to a parallel `~/hf-cache-rw/` we own
+- Hardlinks `blobs/<sha>` files (zero-copy, shared inode, instant reads)
+- Preserves relative snapshot symlinks (resolve within the mirror tree)
+- Byte-copies `refs/<branch>` files (HF lib overwrites these on etag check)
+- Sets `HF_HOME` + `HF_HUB_CACHE` to the mirror so HF lib uses our writable copy
+- Falls back to symlink if `os.link()` returns EXDEV (cross-device)
+
+Result: preloaded files are instantly available (cache hit on first generate),
+non-preloaded files lazy-download into dirs we own (no permission errors).
+
 ### ~~1. Stop preloading models that aren't referenced by any workflow~~ — DONE 2026-05-02
 
 Audit on 2026-05-02 showed two `Lightricks/LTX-2.3` files in `preload_from_hub`

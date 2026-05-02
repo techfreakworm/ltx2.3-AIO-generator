@@ -63,6 +63,91 @@ def _git_clone(url: str, dst: pathlib.Path, ref: str) -> None:
     subprocess.check_call(["git", "-C", str(dst), "checkout", "-q", "FETCH_HEAD"])
 
 
+def _mirror_preload_hf_cache() -> None:
+    """Mirror the build-populated HF cache into a writable runtime tree.
+
+    HF Spaces' build pipeline runs `preload_from_hub` as a different user
+    than the runtime container, so the populated `~/.cache/huggingface/`
+    is read-only for us (uid 1000). Any subsequent `hf_hub_download` call
+    that needs to write a NEW file (lazy-loaded LoRAs, GGUF, etc.) fails
+    with "Permission denied" because the parent dir isn't writable.
+
+    Fix: build a parallel tree at `~/hf-cache-rw/` that we own, with:
+    - dirs: created fresh via mkdir
+    - blob files (`blobs/<sha>`): hardlinked (shared inode, instant)
+    - relative snapshot symlinks: preserved as symlinks
+    - `refs/<branch>` files: byte-copied (HF lib overwrites these)
+    - everything else: byte-copied (safest default)
+    Then set HF_HOME / HF_HUB_CACHE so HF lib reads/writes through the
+    mirror. Reads are zero-copy via hardlink/symlink; new downloads land
+    in dirs we created.
+    """
+    import shutil
+
+    src_root = pathlib.Path.home() / ".cache" / "huggingface"
+    dst_root = pathlib.Path.home() / "hf-cache-rw"
+    dst_root.mkdir(parents=True, exist_ok=True)
+    os.environ["HF_HOME"] = str(dst_root)
+    os.environ["HF_HUB_CACHE"] = str(dst_root / "hub")
+
+    if not src_root.exists():
+        return
+
+    counts = {"dirs": 0, "hardlinks": 0, "symlinks": 0, "copies": 0, "errors": 0}
+
+    def _treat_as_copy(rel_path: pathlib.PurePath) -> bool:
+        # Anything under a refs/ dir, anywhere in the tree.
+        return any(part == "refs" for part in rel_path.parts)
+
+    def _walk(s: pathlib.Path, d: pathlib.Path) -> None:
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            counts["dirs"] += 1
+        except OSError as exc:
+            print(f"[bootstrap] mirror mkdir fail {d}: {exc}", flush=True)
+            counts["errors"] += 1
+            return
+
+        for entry in s.iterdir():
+            de = d / entry.name
+            try:
+                if entry.is_symlink():
+                    if de.exists() or de.is_symlink():
+                        continue
+                    target = os.readlink(str(entry))
+                    de.symlink_to(target)
+                    counts["symlinks"] += 1
+                elif entry.is_dir():
+                    _walk(entry, de)
+                elif entry.is_file():
+                    if de.exists():
+                        continue
+                    rel = de.relative_to(dst_root)
+                    if _treat_as_copy(rel):
+                        shutil.copy2(entry, de)
+                        counts["copies"] += 1
+                    else:
+                        try:
+                            os.link(str(entry), str(de))
+                            counts["hardlinks"] += 1
+                        except OSError:
+                            # Cross-device or other — fall back to symlink.
+                            de.symlink_to(entry)
+                            counts["symlinks"] += 1
+            except OSError as exc:
+                print(f"[bootstrap] mirror skip {entry}: {exc}", flush=True)
+                counts["errors"] += 1
+
+    _walk(src_root, dst_root)
+    print(
+        f"[bootstrap] hf cache mirrored to {dst_root}: "
+        f"{counts['dirs']} dirs, {counts['hardlinks']} hardlinks, "
+        f"{counts['symlinks']} symlinks, {counts['copies']} copies, "
+        f"{counts['errors']} errors",
+        flush=True,
+    )
+
+
 def _bootstrap() -> None:
     on_spaces = _on_spaces()
     # /data requires the paid persistent-storage add-on (separate from Pro).
@@ -95,24 +180,15 @@ def _bootstrap() -> None:
         sys.path.insert(0, str(comfy_dir))
     os.environ.setdefault("COMFY_MODELS_DIR", str(comfy_dir / "models"))
 
-    # Make the HF cache writable: preload_from_hub populates ~/.cache/huggingface
-    # during build, which can leave it in a state that blocks runtime
-    # hf_hub_download writes (e.g., xet's lockdir, blob targets). chmod -R u+rwX
-    # so any model NOT covered by preload (camera LoRAs, conditional GGUF, etc.)
-    # can still lazy-download. Failures here are non-fatal.
+    # Mirror the build-time HF cache (populated by preload_from_hub, owned by
+    # build user → read-only for runtime user 1000) into a writable parallel
+    # tree under $HOME, then point HF_HUB_CACHE / HF_HOME at it. After this:
+    # - preloaded blobs are accessible via hardlink (no data copy, instant reads)
+    # - relative snapshot symlinks resolve within the mirror
+    # - refs/* are byte-copies so HF lib can overwrite when commits advance
+    # - new lazy-downloaded files write to dirs we own → no permission errors
     if on_spaces:
-        import subprocess
-
-        hf_cache = pathlib.Path.home() / ".cache" / "huggingface"
-        if hf_cache.exists():
-            try:
-                subprocess.run(
-                    ["chmod", "-R", "u+rwX", str(hf_cache)],
-                    check=False,
-                    timeout=30,
-                )
-            except Exception as exc:
-                print(f"[bootstrap] hf cache chmod skipped: {exc}", flush=True)
+        _mirror_preload_hf_cache()
 
     # Stage placeholder input files so the workflow's hard-referenced loaders
     # (LoadImage/VHS_Load*) don't error at runtime even when the active mode
