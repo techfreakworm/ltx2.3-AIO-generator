@@ -65,9 +65,12 @@ def _identity(fn):
 
 # ZeroGPU's startup detector scans loaded modules for spaces.GPU-wrapped
 # functions. The decorator must be applied at module load time — runtime
-# wrapping inside a request handler isn't detected. Pro tier per-call cap is
-# 300s, so we use that ceiling and let modes finish whenever they finish.
-_GPU = spaces.GPU(duration=300) if (spaces is not None and _on_spaces()) else _identity
+# wrapping inside a request handler isn't detected. `duration` is the per-call
+# timeout, NOT a billing cap (HF bills actual usage). Setting it generously
+# (10 min) so heavy modes like lipsync (audio encoder + extra LoRAs + VAE
+# decode + ffmpeg mux) don't hit the 300s wall mid-mux. Light modes return
+# in ~30-60s and free the GPU back into the pool.
+_GPU = spaces.GPU(duration=600) if (spaces is not None and _on_spaces()) else _identity
 
 
 @_GPU
@@ -359,7 +362,7 @@ class ComfyUILibraryBackend:
                 # ProgressBar class reads, but is the documented API.
                 comfy.utils.set_progress_bar_global_hook(_hook)
                 # _execute_workflow is module-level and decorated with
-                # @spaces.GPU(duration=300) on Spaces — that's what makes the
+                # @spaces.GPU(duration=600) on Spaces — that's what makes the
                 # heavy compute run on a borrowed H200. Off-Spaces it's a
                 # plain call. Returns the video path directly (computed
                 # inside the GPU context so the executor's history is fresh).
