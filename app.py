@@ -167,6 +167,14 @@ _CUSTOM_CSS = """
     border-bottom: 1px solid #262C35;
     background: #12161B;
     position: relative;
+    /* HF injects #huggingface-space-header at fixed z-index 20 (top-right
+       like/share widget). Stay below it by default so we don't cover it. */
+    z-index: 15;
+}
+/* When drawer is open, lift header above scrim (z-45) and drawer (z-50) so
+   the hamburger flips to × and remains clickable as a close affordance.
+   Toggled in lockstep with .aio-shell.drawer-open via the inline JS below. */
+.aio-header.drawer-elevated {
     z-index: 60;
 }
 .aio-ham-label {
@@ -344,9 +352,11 @@ _HEAD_HTML = """
     if (!s || !s.classList.contains("drawer-open")) return;
     if (e.target.closest(".aio-drawer") || e.target.closest(".aio-ham-label")) return;
     s.classList.remove("drawer-open");
+    var h = document.querySelector(".aio-header");
+    if (h) h.classList.remove("drawer-elevated");
     var b = document.querySelector(".aio-ham-label");
     if (b) {
-      b.textContent = "≡";
+      b.textContent = "\\u2261";
       b.setAttribute("aria-expanded", "false");
     }
   });
@@ -366,6 +376,8 @@ def build_app() -> gr.Blocks:
             '  <button type="button" class="aio-ham-label" '
             '          onclick="(function(b){var s=document.querySelector(\'.aio-shell\');'
             'var o=s.classList.toggle(\'drawer-open\');'
+            'var h=document.querySelector(\'.aio-header\');'
+            'if(h)h.classList.toggle(\'drawer-elevated\',o);'
             'b.textContent=o?\'\\u00d7\':\'\\u2261\';'
             'b.setAttribute(\'aria-expanded\',o?\'true\':\'false\');})(this)" '
             '          aria-expanded="false" aria-label="Toggle navigation">≡</button>'
@@ -430,6 +442,7 @@ def build_app() -> gr.Blocks:
                    f"if (el) el.textContent = {tag!r}; "
                    f"if (window.matchMedia('(max-width: 1023px)').matches) {{ "
                    f"  document.querySelector('.aio-shell')?.classList.remove('drawer-open'); "
+                   f"  document.querySelector('.aio-header')?.classList.remove('drawer-elevated'); "
                    f"}} return []; }}",
             )
 
