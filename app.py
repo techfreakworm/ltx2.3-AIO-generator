@@ -443,6 +443,8 @@ def build_app() -> gr.Blocks:
                    f"if (window.matchMedia('(max-width: 1023px)').matches) {{ "
                    f"  document.querySelector('.aio-shell')?.classList.remove('drawer-open'); "
                    f"  document.querySelector('.aio-header')?.classList.remove('drawer-elevated'); "
+                   f"  const hb = document.querySelector('.aio-ham-label'); "
+                   f"  if (hb) {{ hb.textContent = '\\u2261'; hb.setAttribute('aria-expanded', 'false'); }} "
                    f"}} return []; }}",
             )
 
