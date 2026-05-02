@@ -177,11 +177,17 @@ def _walk_for_filenames(value, into: set[str]) -> None:
     Power Lora Loader stores its rows nested as `inputs.lora_1 = {on, lora,
     strength}` and similar — a flat values() loop misses these. Recurse
     through dicts and lists/tuples so nested filenames are caught.
+
+    Skips Power Lora Loader rows with `on: false` — those LoRAs aren't
+    actually loaded at runtime so there's no point downloading them.
     """
     if isinstance(value, str):
         if value.endswith(_MODEL_EXTS) or value == "tokenizer.model":
             into.add(value)
     elif isinstance(value, dict):
+        # Power Lora Loader row: {"on": bool, "lora": "...", "strength": ...}
+        if "on" in value and "lora" in value and not value.get("on"):
+            return
         for v in value.values():
             _walk_for_filenames(v, into)
     elif isinstance(value, (list, tuple)):

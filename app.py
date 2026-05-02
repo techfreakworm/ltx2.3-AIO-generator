@@ -95,6 +95,25 @@ def _bootstrap() -> None:
         sys.path.insert(0, str(comfy_dir))
     os.environ.setdefault("COMFY_MODELS_DIR", str(comfy_dir / "models"))
 
+    # Make the HF cache writable: preload_from_hub populates ~/.cache/huggingface
+    # during build, which can leave it in a state that blocks runtime
+    # hf_hub_download writes (e.g., xet's lockdir, blob targets). chmod -R u+rwX
+    # so any model NOT covered by preload (camera LoRAs, conditional GGUF, etc.)
+    # can still lazy-download. Failures here are non-fatal.
+    if on_spaces:
+        import subprocess
+
+        hf_cache = pathlib.Path.home() / ".cache" / "huggingface"
+        if hf_cache.exists():
+            try:
+                subprocess.run(
+                    ["chmod", "-R", "u+rwX", str(hf_cache)],
+                    check=False,
+                    timeout=30,
+                )
+            except Exception as exc:
+                print(f"[bootstrap] hf cache chmod skipped: {exc}", flush=True)
+
     # Stage placeholder input files so the workflow's hard-referenced loaders
     # (LoadImage/VHS_Load*) don't error at runtime even when the active mode
     # doesn't actually use the file. Real user uploads are placed alongside via
@@ -595,7 +614,13 @@ def _get_backend() -> backend_module.ComfyUILibraryBackend:
     return _BACKEND
 
 
-_COMFY_INPUT_DIR = pathlib.Path(__file__).parent / "comfyui" / "input"
+# Must match the comfy_dir used in _bootstrap() — on Spaces this is
+# ~/comfyui (mirroring backend.py's _comfy_dir), otherwise repo-local.
+_COMFY_INPUT_DIR = (
+    (pathlib.Path.home() / "comfyui" / "input")
+    if _on_spaces()
+    else pathlib.Path(__file__).parent / "comfyui" / "input"
+)
 
 
 def _stage_to_comfy_input(file_path) -> str | None:
