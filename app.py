@@ -796,48 +796,91 @@ async def _on_generate(mode_name: str, **inputs: Any):
         wf_module.set_input(workflow, *patch)
 
     backend = _get_backend()
-    duration = PRESET_DURATION.get(str(inputs.get("preset", "Balanced")), 120)
+    preset = params["preset"]  # already lowercased above
 
-    started = time.time()
-    async for event in backend.submit(mode_name, workflow, gpu_duration=duration):
-        elapsed = time.time() - started
+    async def _translate(event, started_at):
+        """Translate one backend event into Gradio (status_html, video) yields.
+
+        Returns the tuple to yield, plus a flag indicating terminal state.
+        """
+        elapsed = time.time() - started_at
         if isinstance(event, backend_module.DownloadEvent):
-            status = ui.render_status(
-                stage_index=0,
-                stage_label=f"Downloading {event.filename}",
-                step=int(event.mb_done),
-                total_steps=int(max(event.mb_total, 1)),
-                elapsed_s=elapsed,
-                eta_s=0,
+            return (
+                ui.render_status(
+                    stage_index=0,
+                    stage_label=f"Downloading {event.filename}",
+                    step=int(event.mb_done),
+                    total_steps=int(max(event.mb_total, 1)),
+                    elapsed_s=elapsed,
+                    eta_s=0,
+                ),
+                gr.update(),
             )
-            yield status, gr.update()
-        elif isinstance(event, backend_module.ProgressEvent):
-            # Each sampler in the workflow gets its own stage label "Diffusion (n)".
-            # The static `mode.stage_map` describes the full pipeline (encode →
-            # diffusion → upscale → diffusion → decode) but our progress hook
-            # only fires inside samplers, so we label by sampler index instead.
+        if isinstance(event, backend_module.ProgressEvent):
             label = f"Diffusion (Stage {event.stage})"
             eta = (elapsed / max(event.step, 1)) * (event.total_steps - event.step)
-            status = ui.render_status(
-                stage_index=event.stage,
-                stage_label=label,
-                step=event.step,
-                total_steps=event.total_steps,
-                elapsed_s=elapsed,
-                eta_s=eta,
+            return (
+                ui.render_status(
+                    stage_index=event.stage,
+                    stage_label=label,
+                    step=event.step,
+                    total_steps=event.total_steps,
+                    elapsed_s=elapsed,
+                    eta_s=eta,
+                ),
+                gr.update(),
             )
-            yield status, gr.update()
-        elif isinstance(event, backend_module.OutputEvent):
+        if isinstance(event, backend_module.OutputEvent):
             video_update = event.video_path if event.video_path else gr.update()
-            yield ui._render_idle(), video_update
-        elif isinstance(event, backend_module.ErrorEvent):
-            error_html = (
+            return (ui._render_idle(), video_update)
+        if isinstance(event, backend_module.ErrorEvent):
+            return (
                 f'<div class="status-card status-error">'
                 f'  <div class="status-row"><span class="status-stage">Error · {event.category}</span></div>'
                 f"  <div>{event.message}</div>"
-                f"</div>"
+                f"</div>",
+                gr.update(),
             )
-            yield error_html, gr.update()
+        return None
+
+    # Tier 1 + Tier 2: one normal attempt; if it aborts on ZeroGPU duration
+    # cap, retry once with a 2× duration multiplier. Each multiplier is
+    # capped at 900s server-side, so the second attempt never exceeds that.
+    started = time.time()
+    multiplier = 1.0
+    timed_out = False
+    for attempt in (0, 1):
+        if attempt == 1:
+            # Show a friendly retry banner before the second submit
+            yield (
+                '<div class="status-card status-error">'
+                '  <div class="status-row"><span class="status-stage">'
+                "Retrying with extended GPU budget</span></div>"
+                "  <div>First attempt hit the per-call duration cap "
+                "(usually a cold model cache or a heavier mode than estimated). "
+                "Reserving 2× the budget and trying once more.</div>"
+                "</div>",
+                gr.update(),
+            )
+            multiplier = 2.0
+            started = time.time()  # reset so progress ETAs are sensible
+
+        timed_out = False
+        async for event in backend.submit(
+            mode_name, workflow, preset=preset, duration_multiplier=multiplier
+        ):
+            if (
+                isinstance(event, backend_module.ErrorEvent)
+                and event.category == "gpu_timeout"
+                and attempt == 0
+            ):
+                timed_out = True
+                break  # don't yield the timeout error — auto-retry instead
+            translated = await _translate(event, started)
+            if translated is not None:
+                yield translated
+        if not timed_out:
+            return
 
 
 def _input_keys_for_mode(mode_name: str, h: dict) -> list[str]:

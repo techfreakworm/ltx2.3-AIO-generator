@@ -63,25 +63,78 @@ def _identity(fn):
     return fn
 
 
-# ZeroGPU's startup detector scans loaded modules for spaces.GPU-wrapped
-# functions. The decorator must be applied at module load time — runtime
-# wrapping inside a request handler isn't detected. `duration` is the per-call
-# timeout, NOT a billing cap (HF bills actual usage). Setting it generously
-# (10 min) so heavy modes like lipsync (audio encoder + extra LoRAs + VAE
-# decode + ffmpeg mux) don't hit the 300s wall mid-mux. Light modes return
-# in ~30-60s and free the GPU back into the pool.
-_GPU = spaces.GPU(duration=600) if (spaces is not None and _on_spaces()) else _identity
+# --- Per-call ZeroGPU duration estimator -----------------------------------
+# `duration` is a per-call timeout. Shorter declared duration → faster queue
+# priority on the shared ZeroGPU pool. Estimating from (mode, preset, frames)
+# instead of using a one-size-fits-all 600s cap means light T2V calls jump
+# the queue while heavy modes (lipsync, style) reserve real headroom.
+
+_BASE_DURATION_S: dict[str, int] = {
+    # Rough sampler+decode time at ~120 frames, balanced preset, warm cache.
+    "t2v": 90,
+    "i2v": 90,
+    "a2v": 120,
+    "lipsync": 240,   # extra: audio encoder + audio VAE + extra LoRAs
+    "keyframe": 180,
+    "style": 360,     # extra: preprocessor (canny/dwpose/depth) + IC-LoRAs
+}
+_PRESET_MULT: dict[str, float] = {"fast": 1.0, "balanced": 1.5, "quality": 3.0}
+
+
+def _frames_from_workflow(workflow: dict) -> int:
+    """Read the frame count from the workflow's EmptyLTXVLatentVideo node."""
+    for node in workflow.values():
+        if isinstance(node, dict) and node.get("class_type") == "EmptyLTXVLatentVideo":
+            try:
+                return int((node.get("inputs") or {}).get("length", 121))
+            except (TypeError, ValueError):
+                return 121
+    return 121
+
+
+def _duration_for(
+    executor: Any,
+    workflow: dict,
+    output_ids: list[str],
+    mode: str,
+    preset: str,
+    multiplier: float = 1.0,
+) -> int:
+    """ZeroGPU duration estimator. Same signature as _execute_workflow.
+
+    Estimate = (base × preset multiplier + cold-cache buffer + per-frame VAE
+    decode time) × retry multiplier, clamped to [60s, 900s]. The 900s ceiling
+    keeps a single failed call from torching the daily quota.
+    """
+    base = _BASE_DURATION_S.get(mode, 180)
+    mult = _PRESET_MULT.get(preset.lower(), 1.5)
+    frames = _frames_from_workflow(workflow)
+    est = int((base * mult + 60 + frames * 0.3) * multiplier)
+    return max(60, min(est, 900))
+
+
+# Decorate at module load time so ZeroGPU's startup analyzer detects it.
+_GPU = (
+    spaces.GPU(duration=_duration_for)
+    if (spaces is not None and _on_spaces())
+    else _identity
+)
 
 
 @_GPU
-def _execute_workflow(executor: Any, workflow: dict, output_ids: list[str]) -> str:
+def _execute_workflow(
+    executor: Any,
+    workflow: dict,
+    output_ids: list[str],
+    mode: str,
+    preset: str,
+    multiplier: float = 1.0,
+) -> str:
     """Run the workflow on GPU and return the path of the first video output.
 
     Returns just the video path (a plain string, picklable across the
-    @spaces.GPU subprocess boundary). Returning the full history_result dict
-    was unreliable on Spaces — under ZeroGPU's GPU-context wrapping, the
-    parent process didn't see the executor's mutated state, so video_path
-    came back empty even when the file was on disk.
+    @spaces.GPU subprocess boundary). The `mode`, `preset`, and `multiplier`
+    args are consumed by `_duration_for` to estimate the GPU slot to reserve.
     """
     executor.execute(
         workflow,
@@ -291,9 +344,20 @@ class ComfyUILibraryBackend:
         return f"ComfyUILibraryBackend(comfy_dir={self._comfy_dir!r})"
 
     async def submit(
-        self, mode: str, workflow: dict, gpu_duration: int = 300
+        self,
+        mode: str,
+        workflow: dict,
+        *,
+        preset: str = "balanced",
+        duration_multiplier: float = 1.0,
+        gpu_duration: int = 0,  # legacy, ignored (now derived from preset+frames)
     ) -> AsyncIterator[Any]:
-        """Run a workflow end-to-end. Yields Download/Progress/Output/Error events."""
+        """Run a workflow end-to-end. Yields Download/Progress/Output/Error events.
+
+        `preset` and `duration_multiplier` flow through to the @spaces.GPU
+        duration estimator. The handler can re-call submit() with
+        duration_multiplier=2.0 if the first attempt aborts on timeout.
+        """
         # Pre-flight: ensure all model files exist.
         try:
             needed = models.walk_workflow_for_models(workflow)
@@ -361,12 +425,14 @@ class ComfyUILibraryBackend:
                 # Use the public setter; it writes the same global the
                 # ProgressBar class reads, but is the documented API.
                 comfy.utils.set_progress_bar_global_hook(_hook)
-                # _execute_workflow is module-level and decorated with
-                # @spaces.GPU(duration=600) on Spaces — that's what makes the
-                # heavy compute run on a borrowed H200. Off-Spaces it's a
-                # plain call. Returns the video path directly (computed
-                # inside the GPU context so the executor's history is fresh).
-                video_path = _execute_workflow(self._executor, workflow, output_ids)
+                # _execute_workflow is module-level and decorated with a
+                # @spaces.GPU(duration=callable) on Spaces — the callable
+                # estimates per-call timeout from (mode, preset, frames) so
+                # light calls get fast queue priority while heavy ones reserve
+                # real headroom. Off-Spaces it's a plain call.
+                video_path = _execute_workflow(
+                    self._executor, workflow, output_ids, mode, preset, duration_multiplier,
+                )
                 # Fallback: if history_result didn't surface a path (rare on
                 # Spaces — happens when ZeroGPU's subprocess boundary drops
                 # mutated state), scan the output dir for the newest mp4
@@ -415,8 +481,14 @@ class ComfyUILibraryBackend:
 
 def _classify(exc: Exception) -> str:
     name = type(exc).__name__.lower()
-    if "outofmemory" in name or "cuda out of memory" in str(exc).lower():
+    msg = str(exc).lower()
+    if "outofmemory" in name or "cuda out of memory" in msg:
         return "oom"
+    # ZeroGPU enforces the @spaces.GPU(duration=N) cap and re-raises as
+    # gradio.exceptions.Error('GPU task aborted'). Surface a distinct
+    # category so the handler can offer a retry with a bigger budget.
+    if "gpu task aborted" in msg or ("gpu" in msg and "aborted" in msg):
+        return "gpu_timeout"
     if "interrupt" in name:
         return "interrupt"
     return "execution"
