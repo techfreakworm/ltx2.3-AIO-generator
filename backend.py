@@ -109,14 +109,17 @@ def _duration_for(
     ZeroGPU can call us with the same arg list it'll use for _execute_workflow.
 
     Estimate = (base × preset multiplier + cold-cache buffer + per-frame VAE
-    decode time) × retry multiplier, clamped to [60s, 900s]. The 900s ceiling
-    keeps a single failed call from torching the daily quota.
+    decode time) × retry multiplier, clamped to [60s, 120s]. The 120s ceiling
+    is ZeroGPU's per-call hard maximum — server rejects requested durations
+    above it with "ZeroGPU illegal duration" (client.py:137, triggered when
+    res.wait < timedelta(0) from the scheduler). 120s on H200 is enough for
+    every preset we ship; longer estimates would just fail the guard check.
     """
     base = _BASE_DURATION_S.get(mode, 180)
     mult = _PRESET_MULT.get(preset.lower(), 1.5)
     frames = _frames_from_workflow(workflow)
     est = int((base * mult + 60 + frames * 0.3) * multiplier)
-    return max(60, min(est, 900))
+    return max(60, min(est, 120))
 
 
 # Decorate at module load time so ZeroGPU's startup analyzer detects it.
