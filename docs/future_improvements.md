@@ -114,3 +114,35 @@ Currently `@spaces.GPU(duration=300)` reserves 5 min per call. For Fast preset
 (distilled 8 steps) actual usage is ~30 s. Could shorten to 120 s — improves
 queue priority for the user (per HF docs). Use dynamic duration based on
 preset.
+
+### 11. Local-perf "low-VRAM" path for style mode (GGUF Q4 transformer)
+
+Style mode on Apple Silicon runs ~37× slower per sampling step than the other
+modes (~596 s/step on Mac vs ~16 s/step for lipsync). Root cause is
+architectural — `LTXAddVideoICLoRAGuide` concatenates the source video's
+DWPose latents into the noisy target latent, doubling the attention sequence
+to ~56 k tokens. Combined with MPS having no flash-attn-2 and the 22B BF16
+model approaching the working-memory ceiling, perf collapses on Mac.
+
+H200 handles this fine (flash-attn-3 + tensor cores + dedicated VRAM ⇒
+~30–60 s end to end on Spaces). So this is fundamentally a Mac/MPS gap, not
+a code bug.
+
+A "Low VRAM" preset that swaps the BF16 transformer for the GGUF Q4
+quantized one would reduce per-step memory pressure and may bring local
+style perf into the workable range (still slow, but maybe ~60–90 s/step
+instead of 600). The GGUF file is already declared in `MODEL_REGISTRY`
+(`UnetLoaderGGUF` consumer). What's missing:
+
+1. A workflow toggle that swaps `UNETLoader` → `UnetLoaderGGUF` for the main
+   transformer in style.json (and other modes that benefit).
+2. A UI control on the Advanced accordion: "Low VRAM (GGUF Q4)".
+3. Wire-through in `_style_parameterize` (and friends) to flip the loader
+   class.
+4. Delete the matching BF16 path nodes when GGUF is selected (or set them
+   to bypass) so we don't load both.
+
+Risk: GGUF transformers behave slightly differently from BF16 — output
+quality drops, especially for IC-LoRA paths where the dynamic range matters.
+Should be opt-in only, never default. Probably v1.1+ scope (it's listed in
+"Out of scope for v1" in CLAUDE.md as the GGUF Q4 / Low VRAM preset).
