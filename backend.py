@@ -7,6 +7,7 @@ divergence between local and HF Spaces deployment.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import os
 import pathlib
 import sys
@@ -492,7 +493,16 @@ class ComfyUILibraryBackend:
                 _free_memory()
                 _push(None)  # sentinel: stop the consumer
 
-        thread = threading.Thread(target=_worker, daemon=True)
+        # ZeroGPU's @spaces.GPU wrapper reads the user's identity from the
+        # current Gradio request via gradio.context.LocalContext.request,
+        # which is a contextvar. Plain threads don't inherit contextvars, so
+        # without this the worker sees request=None, X-IP-Token never gets
+        # read, and `client.schedule` raises "Space app has reached its GPU
+        # limit" (token-is-None branch in spaces/zero/client.py:138). Copy
+        # the calling task's context so the request — and therefore the Pro
+        # user's quota attribution — survives the thread boundary.
+        ctx = contextvars.copy_context()
+        thread = threading.Thread(target=ctx.run, args=(_worker,), daemon=True)
         thread.start()
 
         while True:
