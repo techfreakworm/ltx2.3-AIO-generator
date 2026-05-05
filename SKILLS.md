@@ -23,7 +23,7 @@ Skipping the visual repro twice in a row produced patches that addressed a diffe
 For Spaces failures, the run logs are the source of truth. Pull and search:
 
 ```bash
-HF_TOKEN=$(hf auth token)
+HF_TOKEN=$(cat ~/.cache/huggingface/token)
 curl -s -H "Authorization: Bearer ${HF_TOKEN}" \
   "https://huggingface.co/api/spaces/techfreakworm/LTX2.3-Studio/logs/run" \
   -o /tmp/hf_run.log
@@ -48,6 +48,7 @@ PY
 ### Stage check before action
 
 ```bash
+HF_TOKEN=$(cat ~/.cache/huggingface/token)
 curl -s -H "Authorization: Bearer ${HF_TOKEN}" \
   "https://huggingface.co/api/spaces/techfreakworm/LTX2.3-Studio" | jq -r '.runtime'
 ```
@@ -152,7 +153,7 @@ lsof -nP -iTCP:7860 -sTCP:LISTEN | awk 'NR>1 {print $2}' | xargs -r kill -9
 
 ```bash
 git push origin master                                                 # GitHub
-HF_TOKEN=$(hf auth token)                                              # HF auth
+HF_TOKEN=$(cat ~/.cache/huggingface/token)                             # HF auth (cli removed `hf auth token`)
 git push "https://techfreakworm:${HF_TOKEN}@huggingface.co/spaces/techfreakworm/LTX2.3-Studio" master:main
 ```
 
@@ -273,7 +274,7 @@ Do not loop on patches when you've patched twice and it's still broken.
 
 ```bash
 # What's the Space's current SHA vs local HEAD
-hf_sha=$(curl -s -H "Authorization: Bearer $(hf auth token)" \
+hf_sha=$(curl -s -H "Authorization: Bearer $(cat ~/.cache/huggingface/token)" \
   "https://huggingface.co/api/spaces/techfreakworm/LTX2.3-Studio" \
   | jq -r '.sha')
 echo "HF: ${hf_sha:0:8}  local: $(git rev-parse HEAD | cut -c1-8)"
