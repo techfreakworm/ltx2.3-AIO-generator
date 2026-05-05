@@ -99,8 +99,13 @@ def _duration_for(
     mode: str,
     preset: str,
     multiplier: float = 1.0,
+    progress: Any = None,
 ) -> int:
     """ZeroGPU duration estimator. Same signature as _execute_workflow.
+
+    `progress` is a gr.Progress instance forwarded by the caller; we ignore it
+    here (estimator doesn't emit progress) but must accept it positionally so
+    ZeroGPU can call us with the same arg list it'll use for _execute_workflow.
 
     Estimate = (base × preset multiplier + cold-cache buffer + per-frame VAE
     decode time) × retry multiplier, clamped to [60s, 900s]. The 900s ceiling
