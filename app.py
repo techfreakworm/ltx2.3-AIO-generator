@@ -280,6 +280,19 @@ _CUSTOM_CSS = """
     border-radius: 4px;
 }
 
+.aio-tipbar {
+    margin: 0 0 6px 0;
+    padding: 6px 14px;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 12px;
+    color: #B5BCC6;
+    background: #1A1F26;
+    border-bottom: 1px solid #262C35;
+    text-align: center;
+}
+.aio-tipbar strong { color: #E6E8EB; font-weight: 500; }
+.aio-tipbar .aio-heart { color: #E55B6E; }
+
 /* === Drawer === */
 .aio-shell { position: relative; }
 .aio-drawer {
@@ -459,6 +472,13 @@ def build_app() -> gr.Blocks:
             '          aria-expanded="false" aria-label="Toggle navigation">≡</button>'
             '  <span class="aio-title">LTX 2.3 <span class="accent">Studio</span></span>'
             '  <span class="aio-mode-tag" id="aio-mode-tag">T2V</span>'
+            '</div>'
+        )
+        gr.HTML(
+            '<div class="aio-tipbar">'
+            'Liking this project? '
+            '<strong>Drop a <span class="aio-heart">♥</span> at the top of this page</strong> '
+            'to support it.'
             '</div>'
         )
 
@@ -748,6 +768,58 @@ def _stage_to_comfy_input(file_path) -> str | None:
 PRESET_DURATION = {"Fast": 60, "Balanced": 120, "Quality": 300}
 
 
+_FRIENDLY_ERRORS: dict[str, tuple[str, str]] = {
+    "gpu_timeout": (
+        "Hit the GPU time limit",
+        "This run took longer than the GPU budget. Try the Fast preset, a "
+        "shorter video, or a smaller resolution — then click Generate again.",
+    ),
+    "expired_token": (
+        "Session timed out",
+        "Your sign-in session expired. Refresh the page and try again — "
+        "you'll keep your spot in the GPU queue.",
+    ),
+    "illegal_duration": (
+        "GPU budget too high",
+        "The estimator asked for more GPU time than the server allows. "
+        "Try Fast preset or a shorter video.",
+    ),
+    "unlogged": (
+        "Sign-in not detected",
+        "Make sure you're signed into huggingface.co (top-right avatar), "
+        "then refresh this page. Pro accounts get 25 min of GPU per day.",
+    ),
+    "quota_exceeded": (
+        "Daily GPU quota used up",
+        "You've used today's GPU minutes. Wait for the rolling 24-hour "
+        "reset, or upgrade Pro at huggingface.co/subscribe/pro for more.",
+    ),
+    "oom": (
+        "Ran out of GPU memory",
+        "Try a smaller resolution, fewer frames, or the Fast preset.",
+    ),
+    "interrupt": (
+        "Cancelled",
+        "Generation was cancelled. Click Generate to start a fresh run.",
+    ),
+    "download": (
+        "Model download failed",
+        "Couldn't fetch a required model file. Check your internet and try again.",
+    ),
+}
+
+
+def _friendly_error(category: str, raw_message: str) -> tuple[str, str]:
+    """Translate a backend error category into (title, body) the user can act on."""
+    if category in _FRIENDLY_ERRORS:
+        return _FRIENDLY_ERRORS[category]
+    return (
+        "Generation failed",
+        "Something went wrong. Click Generate to retry, or check the Space "
+        "logs if it keeps happening.",
+    )
+
+
 def _seconds_to_frames(seconds: float, fps: int) -> int:
     return max(9, int(round(float(seconds) * float(fps) / 8) * 8) + 1)
 
@@ -841,55 +913,28 @@ async def _on_generate(mode_name: str, *, progress: Any = None, **inputs: Any):
             video_update = event.video_path if event.video_path else gr.update()
             return (ui._render_idle(), video_update)
         if isinstance(event, backend_module.ErrorEvent):
+            title, body = _friendly_error(event.category, event.message)
             return (
                 f'<div class="status-card status-error">'
-                f'  <div class="status-row"><span class="status-stage">Error · {event.category}</span></div>'
-                f"  <div>{event.message}</div>"
+                f'  <div class="status-row"><span class="status-stage">{title}</span></div>'
+                f"  <div>{body}</div>"
                 f"</div>",
                 gr.update(),
             )
         return None
 
-    # Tier 1 + Tier 2: one normal attempt; if it aborts on ZeroGPU duration
-    # cap, retry once with a 2× duration multiplier. Each multiplier is
-    # capped at 900s server-side, so the second attempt never exceeds that.
+    # Single attempt. ZeroGPU-side abort (duration cap) and 401 expired-token
+    # surface as friendly messages via _friendly_error; user clicks Generate
+    # again to retry with a fresh request and fresh X-IP-Token.
     started = time.time()
-    multiplier = 1.0
-    timed_out = False
-    for attempt in (0, 1):
-        if attempt == 1:
-            # Show a friendly retry banner before the second submit
-            yield (
-                '<div class="status-card status-error">'
-                '  <div class="status-row"><span class="status-stage">'
-                "Retrying with extended GPU budget</span></div>"
-                "  <div>First attempt hit the per-call duration cap "
-                "(usually a cold model cache or a heavier mode than estimated). "
-                "Reserving 2× the budget and trying once more.</div>"
-                "</div>",
-                gr.update(),
-            )
-            multiplier = 2.0
-            started = time.time()  # reset so progress ETAs are sensible
-
-        timed_out = False
-        async for event in backend.submit(
-            mode_name, workflow,
-            preset=preset, duration_multiplier=multiplier,
-            progress=progress,
-        ):
-            if (
-                isinstance(event, backend_module.ErrorEvent)
-                and event.category == "gpu_timeout"
-                and attempt == 0
-            ):
-                timed_out = True
-                break  # don't yield the timeout error — auto-retry instead
-            translated = await _translate(event, started)
-            if translated is not None:
-                yield translated
-        if not timed_out:
-            return
+    async for event in backend.submit(
+        mode_name, workflow,
+        preset=preset, duration_multiplier=1.0,
+        progress=progress,
+    ):
+        translated = await _translate(event, started)
+        if translated is not None:
+            yield translated
 
 
 def _input_keys_for_mode(mode_name: str, h: dict) -> list[str]:

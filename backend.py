@@ -109,17 +109,17 @@ def _duration_for(
     ZeroGPU can call us with the same arg list it'll use for _execute_workflow.
 
     Estimate = (base × preset multiplier + cold-cache buffer + per-frame VAE
-    decode time) × retry multiplier, clamped to [60s, 120s]. The 120s ceiling
-    is ZeroGPU's per-call hard maximum — server rejects requested durations
-    above it with "ZeroGPU illegal duration" (client.py:137, triggered when
-    res.wait < timedelta(0) from the scheduler). 120s on H200 is enough for
-    every preset we ship; longer estimates would just fail the guard check.
+    decode time) × retry multiplier, clamped to [60s, 240s]. ZeroGPU rejects
+    durations above the server's per-call max with "ZeroGPU illegal duration"
+    (client.py:137); 240s is observed to work for Pro identity (~2 min runs
+    needed for style + lipsync detailer paths). If the server rejects values
+    in this range, the user will see a clear error and can retry.
     """
     base = _BASE_DURATION_S.get(mode, 180)
     mult = _PRESET_MULT.get(preset.lower(), 1.5)
     frames = _frames_from_workflow(workflow)
     est = int((base * mult + 60 + frames * 0.3) * multiplier)
-    return max(60, min(est, 120))
+    return max(60, min(est, 240))
 
 
 # Decorate at module load time so ZeroGPU's startup analyzer detects it.
@@ -529,9 +529,16 @@ def _classify(exc: Exception) -> str:
     msg = str(exc).lower()
     if "outofmemory" in name or "cuda out of memory" in msg:
         return "oom"
+    if "expired zerogpu proxy token" in msg or "expired" in msg and "token" in msg:
+        return "expired_token"
+    if "illegal duration" in msg:
+        return "illegal_duration"
+    if "unlogged user" in msg:
+        return "unlogged"
+    if "exceeded your" in msg and "gpu" in msg:
+        return "quota_exceeded"
     # ZeroGPU enforces the @spaces.GPU(duration=N) cap and re-raises as
-    # gradio.exceptions.Error('GPU task aborted'). Surface a distinct
-    # category so the handler can offer a retry with a bigger budget.
+    # gradio.exceptions.Error('GPU task aborted').
     if "gpu task aborted" in msg or ("gpu" in msg and "aborted" in msg):
         return "gpu_timeout"
     if "interrupt" in name:
