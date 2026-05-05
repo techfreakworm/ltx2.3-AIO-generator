@@ -49,6 +49,8 @@ gguf  # ComfyUI-GGUF (UnetLoaderGGUF)
 imageio_ffmpeg  # ComfyUI-VideoHelperSuite (video write/read backend)
 opencv-python  # ComfyUI_LayerStyle, multiple custom nodes
 matplotlib  # comfyui_controlnet_aux dwpose / pose preprocessors
+scikit-image  # comfyui_controlnet_aux dwpose hand keypoint detector
+onnxruntime  # comfyui_controlnet_aux dwpose accelerator (CPU/CoreML on Mac, CUDA on Spaces)
 diffusers  # ComfyUI-SeedVR2 (used during init even when the node isn't called)
 yt-dlp  # ComfyUI-MediaMixer (init-time import)
 

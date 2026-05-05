@@ -129,13 +129,39 @@ def _execute_workflow(
     mode: str,
     preset: str,
     multiplier: float = 1.0,
+    progress: Any = None,
 ) -> str:
     """Run the workflow on GPU and return the path of the first video output.
 
     Returns just the video path (a plain string, picklable across the
     @spaces.GPU subprocess boundary). The `mode`, `preset`, and `multiplier`
     args are consumed by `_duration_for` to estimate the GPU slot to reserve.
+
+    `progress` is an optional `gr.Progress` instance. It's the only progress
+    channel that crosses the @spaces.GPU subprocess boundary on HF Spaces —
+    Gradio + the `spaces` library wrap it with cross-process IPC. When set,
+    we mirror ComfyUI's step counter into it via the global progress hook,
+    chaining to whatever hook was already installed (so the local event-based
+    status banner keeps working alongside).
     """
+    if progress is not None:
+        import comfy.utils as _cu
+        _saved_hook = getattr(_cu, "PROGRESS_BAR_HOOK", None)
+
+        def _gp_hook(value, total, _preview=None, **_kw):
+            try:
+                v, t = int(value), int(total)
+                progress(v / max(t, 1), desc=f"Sampling step {v}/{t}")
+            except Exception:
+                pass
+            if _saved_hook is not None:
+                try:
+                    _saved_hook(value, total, _preview)
+                except Exception:
+                    pass
+
+        _cu.set_progress_bar_global_hook(_gp_hook)
+
     executor.execute(
         workflow,
         prompt_id="ltx23-aio",
@@ -351,6 +377,7 @@ class ComfyUILibraryBackend:
         preset: str = "balanced",
         duration_multiplier: float = 1.0,
         gpu_duration: int = 0,  # legacy, ignored (now derived from preset+frames)
+        progress: Any = None,
     ) -> AsyncIterator[Any]:
         """Run a workflow end-to-end. Yields Download/Progress/Output/Error events.
 
@@ -431,7 +458,7 @@ class ComfyUILibraryBackend:
                 # light calls get fast queue priority while heavy ones reserve
                 # real headroom. Off-Spaces it's a plain call.
                 video_path = _execute_workflow(
-                    self._executor, workflow, output_ids, mode, preset, duration_multiplier,
+                    self._executor, workflow, output_ids, mode, preset, duration_multiplier, progress,
                 )
                 # Fallback: if history_result didn't surface a path (rare on
                 # Spaces — happens when ZeroGPU's subprocess boundary drops

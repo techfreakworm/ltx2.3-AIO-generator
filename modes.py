@@ -124,7 +124,9 @@ def _keyframe_parameterize(inp: dict[str, Any]) -> list[Patch]:
 
 def _style_parameterize(inp: dict[str, Any]) -> list[Patch]:
     return _shared_patches(inp, "style") + [
+        (NODE_IMAGE_1, "image", inp["image"]),
         (NODE_VIDEO, "video", inp["input_video"]),
+        (NODE_VIDEO, "skip_first_frames", 0),
     ]
 
 

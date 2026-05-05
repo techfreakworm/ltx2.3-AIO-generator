@@ -466,6 +466,13 @@ def build_app() -> gr.Blocks:
             # Drawer (drawer behaves as fixed sidebar ≥1024 px;
             # absolute-positioned overlay <1024 px — see _CUSTOM_CSS).
             with gr.Column(scale=1, min_width=200, elem_classes=["aio-drawer"]):
+                if os.getenv("OAUTH_CLIENT_ID"):
+                    gr.Markdown("Account", elem_classes=["aio-drawer-heading"])
+                    gr.LoginButton(
+                        value="Sign in for Pro GPU quota",
+                        size="sm",
+                        elem_classes=["aio-login-btn"],
+                    )
                 gr.Markdown("Modes", elem_classes=["aio-drawer-heading"])
                 mode_buttons = {
                     name: gr.Button(
@@ -632,6 +639,7 @@ def _render_one_mode(name: str) -> dict:
                 handles["first_frame"] = gr.Image(label="First frame", type="filepath")
                 handles["last_frame"] = gr.Image(label="Last frame", type="filepath")
             elif name == "style":
+                handles["image"] = gr.Image(label="Style reference", type="filepath")
                 handles["input_video"] = gr.Video(label="Source video")
 
             handles["preset"] = ui.preset_bar()
@@ -751,8 +759,14 @@ def _seconds_to_frames(seconds: float, fps: int) -> int:
     return max(9, int(round(float(seconds) * float(fps) / 8) * 8) + 1)
 
 
-async def _on_generate(mode_name: str, **inputs: Any):
-    """Generate handler — async generator yielding (status_html, video_path)."""
+async def _on_generate(mode_name: str, *, progress: Any = None, **inputs: Any):
+    """Generate handler — async generator yielding (status_html, video_path).
+
+    `progress` is a `gr.Progress` instance injected by Gradio. It's the only
+    progress channel that survives the @spaces.GPU subprocess boundary on HF
+    Spaces; we forward it to the backend so ComfyUI's per-step counter renders
+    a real progress bar instead of a generic Gradio spinner.
+    """
     mode = modes.MODE_REGISTRY[mode_name]
 
     fps = int(inputs.get("fps", 24))
@@ -867,7 +881,9 @@ async def _on_generate(mode_name: str, **inputs: Any):
 
         timed_out = False
         async for event in backend.submit(
-            mode_name, workflow, preset=preset, duration_multiplier=multiplier
+            mode_name, workflow,
+            preset=preset, duration_multiplier=multiplier,
+            progress=progress,
         ):
             if (
                 isinstance(event, backend_module.ErrorEvent)
@@ -894,7 +910,7 @@ def _input_keys_for_mode(mode_name: str, h: dict) -> list[str]:
     elif mode_name == "keyframe":
         base.extend(["first_frame", "last_frame"])
     elif mode_name == "style":
-        base.append("input_video")
+        base.extend(["image", "input_video"])
     base.append("negative_prompt")
     base.extend(["camera_lora", "camera_strength", "detailer_on", "detailer_strength"])
     if h["lora"].ic_lora is not None:
@@ -918,7 +934,7 @@ def _collect_inputs_for_mode(mode_name: str, h: dict) -> list:
     elif mode_name == "keyframe":
         base.extend([h["first_frame"], h["last_frame"]])
     elif mode_name == "style":
-        base.append(h["input_video"])
+        base.extend([h["image"], h["input_video"]])
     base.append(h["negative_prompt"])
     base.extend([
         h["lora"].camera_lora, h["lora"].camera_strength,
@@ -934,9 +950,9 @@ def _collect_inputs_for_mode(mode_name: str, h: dict) -> list:
 def _make_handler(mode_name: str, h: dict):
     keys = _input_keys_for_mode(mode_name, h)
 
-    async def handler(*values):
+    async def handler(*values, progress=gr.Progress()):
         kwargs = dict(zip(keys, values, strict=False))
-        async for output in _on_generate(mode_name, **kwargs):
+        async for output in _on_generate(mode_name, progress=progress, **kwargs):
             yield output
 
     return handler

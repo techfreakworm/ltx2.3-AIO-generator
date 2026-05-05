@@ -8,7 +8,8 @@ sdk_version: "5.50.0"
 app_file: app.py
 python_version: "3.11"
 suggested_hardware: zero-a10g
-hf_oauth: false
+hf_oauth: true
+hf_oauth_expiration_minutes: 480
 preload_from_hub:
   - Comfy-Org/ltx-2 split_files/text_encoders/gemma_3_12B_it.safetensors
   - Kijai/LTX2.3_comfy diffusion_models/ltx-2.3-22b-dev_transformer_only_bf16.safetensors,loras/ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors,text_encoders/ltx-2.3_text_projection_bf16.safetensors,vae/LTX23_audio_vae_bf16.safetensors,vae/LTX23_video_vae_bf16.safetensors,vae/taeltx2_3.safetensors
