@@ -293,6 +293,19 @@ _CUSTOM_CSS = """
 .aio-tipbar strong { color: #E6E8EB; font-weight: 500; }
 .aio-tipbar .aio-heart { color: #E55B6E; }
 
+.aio-mode-warning {
+    margin: 4px 0 10px 0 !important;
+    padding: 10px 14px !important;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif !important;
+    font-size: 12px !important;
+    line-height: 1.55 !important;
+    color: #D4C18B !important;
+    background: rgba(224, 164, 88, 0.08) !important;
+    border-left: 3px solid #E0A458 !important;
+    border-radius: 4px !important;
+}
+.aio-mode-warning strong { color: #E0A458 !important; font-weight: 500 !important; }
+
 /* === Drawer === */
 .aio-shell { position: relative; }
 .aio-drawer {
@@ -652,6 +665,16 @@ def _render_one_mode(name: str) -> dict:
                 handles["first_frame"] = gr.Image(label="First frame", type="filepath")
                 handles["last_frame"] = gr.Image(label="Last frame", type="filepath")
             elif name == "style":
+                gr.Markdown(
+                    "**Heads up — Style Transfer is the heaviest mode.** "
+                    "It runs the source video through pose detection AND adds "
+                    "every frame as conditioning, so even the Fast preset can "
+                    "blow the per-call GPU budget on free/anonymous tier. "
+                    "**A failed run still consumes daily quota.** "
+                    "For reliable runs: HF Pro account, resolution ≤ 1024×576, "
+                    "source video ≤ 8 s.",
+                    elem_classes=["aio-mode-warning"],
+                )
                 handles["image"] = gr.Image(label="Style reference", type="filepath")
                 handles["input_video"] = gr.Video(label="Source video")
 
