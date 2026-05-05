@@ -466,13 +466,6 @@ def build_app() -> gr.Blocks:
             # Drawer (drawer behaves as fixed sidebar ≥1024 px;
             # absolute-positioned overlay <1024 px — see _CUSTOM_CSS).
             with gr.Column(scale=1, min_width=200, elem_classes=["aio-drawer"]):
-                if os.getenv("OAUTH_CLIENT_ID"):
-                    gr.Markdown("Account", elem_classes=["aio-drawer-heading"])
-                    gr.LoginButton(
-                        value="Sign in for Pro GPU quota",
-                        size="sm",
-                        elem_classes=["aio-login-btn"],
-                    )
                 gr.Markdown("Modes", elem_classes=["aio-drawer-heading"])
                 mode_buttons = {
                     name: gr.Button(
