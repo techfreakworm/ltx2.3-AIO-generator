@@ -306,6 +306,19 @@ _CUSTOM_CSS = """
 }
 .aio-mode-warning strong { color: #E0A458 !important; font-weight: 500 !important; }
 
+.aio-hf-tip {
+    margin: 12px 0 8px 0 !important;
+    padding: 9px 14px !important;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif !important;
+    font-size: 11.5px !important;
+    line-height: 1.5 !important;
+    color: #9CA8B5 !important;
+    background: rgba(124, 134, 147, 0.06) !important;
+    border-left: 3px solid #5C6671 !important;
+    border-radius: 4px !important;
+}
+.aio-hf-tip strong { color: #C8D0DA !important; font-weight: 500 !important; }
+
 /* === Drawer === */
 .aio-shell { position: relative; }
 .aio-drawer {
@@ -708,6 +721,15 @@ def _render_one_mode(name: str) -> dict:
             with gr.Accordion("Advanced ▾", open=False):
                 handles["lora"] = ui.lora_chrome(name)
                 handles["negative_prompt"] = gr.Textbox(label="Negative prompt", lines=2)
+
+            gr.Markdown(
+                "**Tip for HF Spaces users:** Heavier configurations "
+                "(Cinematic preset, high resolution, long videos) target local "
+                "hardware and may abort mid-run on Spaces — burning quota with "
+                "no output. Stay at Fast/Balanced + ≤ 1024×576 + ≤ 6 s output "
+                "for safe Spaces runs.",
+                elem_classes=["aio-hf-tip"],
+            )
 
             handles["generate_btn"] = gr.Button("▶ Generate", variant="primary", size="lg")
 
