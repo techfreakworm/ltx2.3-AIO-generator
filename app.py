@@ -502,9 +502,11 @@ def build_app() -> gr.Blocks:
         )
         gr.HTML(
             '<div class="aio-tipbar">'
-            'Liking this project? '
-            '<strong>Drop a <span class="aio-heart">♥</span> at the top of this page</strong> '
-            'to support it.'
+            'Built with care. '
+            '<strong>Drop a <span class="aio-heart">♥</span> at the top</strong> to support it '
+            '· '
+            'Follow <a href="https://huggingface.co/techfreakworm" target="_blank" rel="noopener noreferrer">@techfreakworm</a> '
+            'for what\'s next.'
             '</div>'
         )
 
