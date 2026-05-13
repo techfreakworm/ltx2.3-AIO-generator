@@ -1,8 +1,14 @@
-# Skills — how to make changes in this project
+# SKILLS.md — how to make changes in this project
 
-Process rules and habits for AI assistants working on this repo. Companion to `CLAUDE.md` (which is *what & why*); this file is *how*.
+Process rules and habits for agents working on this repo. Sits alongside:
 
-> Default rule when in doubt: **stop and ask the user**. The user prefers a question over wrong work.
+- `AGENTS.md` — the tool-agnostic rulebook (locked decisions, out-of-scope list, commit + verification rules).
+- `CLAUDE.md` — Claude-specific extensions + full gotchas catalogue (*what & why*).
+- `README.md` — public-facing intro (different audience).
+
+This file is the *how* — debugging patterns, verification habits, deployment workflow, useful one-liners.
+
+> **Default rule when in doubt:** stop and ask the user. The user prefers a question over wrong work.
 
 ---
 
@@ -152,12 +158,15 @@ lsof -nP -iTCP:7860 -sTCP:LISTEN | awk 'NR>1 {print $2}' | xargs -r kill -9
 ### Two remotes
 
 ```bash
-git push origin master                                                 # GitHub
-HF_TOKEN=$(cat ~/.cache/huggingface/token)                             # HF auth (cli removed `hf auth token`)
-git push "https://techfreakworm:${HF_TOKEN}@huggingface.co/spaces/techfreakworm/LTX2.3-Studio" master:main
+git push origin master           # GitHub:  techfreakworm/ltx2.3-AIO-generator
+git push space  master:main      # HF Space: techfreakworm/LTX2.3-Studio (deploys from main)
 ```
 
-GitHub: `master`. HF Space: `main`. The Space accepts force-push only with explicit user consent.
+The repo has both remotes pre-configured (`origin` + `space`). HF credentials live in `~/.cache/huggingface/token`; git's credential helper picks them up automatically — no need to embed the token in the URL.
+
+> ⚠ **Refspec matters for the Space push.** Local default branch is `master`; the HF Space deploys from `main`. A bare `git push space master` succeeds but creates an orphan `refs/heads/master` on the remote that does NOT trigger a deploy — the Space silently stays on the old build. Always push with the `master:main` refspec form.
+
+If unsure, verify with `git ls-remote space` — `HEAD` should point at `refs/heads/main`.
 
 ### When to push
 
@@ -261,9 +270,10 @@ Do not loop on patches when you've patched twice and it's still broken.
 │   └── future_improvements.md
 ├── tools/extract_modes.py    # regenerate workflows/ from master
 ├── tests/
-├── README.md            # HF Space YAML + project description
-├── CLAUDE.md            # what & why (this project's facts)
-├── SKILLS.md            # how (this file)
+├── README.md            # HF Space YAML + project intro (public-facing)
+├── AGENTS.md            # tool-agnostic agent rulebook (locked decisions, OoS)
+├── CLAUDE.md            # what & why — full gotchas catalogue
+├── SKILLS.md            # how — process, debugging, deployment (this file)
 ├── requirements.txt
 └── comfyui/             # git submodule (local) / runtime clone target (Spaces)
 ```
