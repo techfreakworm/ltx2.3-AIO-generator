@@ -523,6 +523,18 @@ def build_app() -> gr.Blocks:
                     )
                     for name, m in modes.MODE_REGISTRY.items()
                 }
+                # ZeroGPU per-call cap, placed right under the mode list so
+                # it's visible without scrolling. The pre-flight gate in
+                # _on_generate refuses calls whose estimate exceeds this.
+                gpu_budget_slider = gr.Slider(
+                    minimum=60,
+                    maximum=1800,
+                    value=240,
+                    step=30,
+                    label="GPU budget (seconds)",
+                    info="Max GPU time per generation. Higher = heavy modes fit; uses more of your daily quota per call.",
+                    elem_classes=["aio-gpu-budget"],
+                )
                 gr.Markdown("Models", elem_classes=["aio-drawer-heading"])
                 model_status = gr.HTML(_render_model_status_idle(), elem_id="aio-model-status")
                 refresh_btn = gr.Button("Refresh", size="sm", variant="secondary")
@@ -539,9 +551,11 @@ def build_app() -> gr.Blocks:
             with gr.Column(scale=4, elem_classes=["aio-body"]):
                 handles, tabs_component = _render_mode_panels()
 
-        # Wire generate buttons
+        # Wire generate buttons. The GPU-budget slider lives in the drawer and
+        # is the same instance for every mode — append it last so the handler
+        # receives it as `gpu_budget` (see `_input_keys_for_mode`).
         for name, h in handles.items():
-            inputs = _collect_inputs_for_mode(name, h)
+            inputs = _collect_inputs_for_mode(name, h) + [gpu_budget_slider]
             h["generate_btn"].click(
                 fn=_make_handler(name, h),
                 inputs=inputs,
@@ -818,8 +832,9 @@ PRESET_DURATION = {"Fast": 60, "Balanced": 120, "Quality": 300}
 _FRIENDLY_ERRORS: dict[str, tuple[str, str]] = {
     "gpu_timeout": (
         "Hit the GPU time limit",
-        "This run took longer than the GPU budget. Try the Fast preset, a "
-        "shorter video, or a smaller resolution — then click Generate again.",
+        "This run took longer than the GPU budget. Raise the GPU-budget "
+        "slider (in the sidebar), or try the Fast preset / a shorter video, "
+        "then click Generate again.",
     ),
     "expired_token": (
         "Session timed out",
@@ -827,9 +842,10 @@ _FRIENDLY_ERRORS: dict[str, tuple[str, str]] = {
         "you'll keep your spot in the GPU queue.",
     ),
     "illegal_duration": (
-        "GPU budget too high",
-        "The estimator asked for more GPU time than the server allows. "
-        "Try Fast preset or a shorter video.",
+        "GPU budget too high for your account",
+        "HF rejected the requested duration as exceeding your account's "
+        "per-call cap. Lower the GPU-budget slider (sidebar) and try again, "
+        "or drop the preset / shorten the video.",
     ),
     "unlogged": (
         "Sign-in not detected",
@@ -956,6 +972,29 @@ async def _on_generate(mode_name: str, *, progress: Any = None, **inputs: Any):
     backend = _get_backend()
     preset = params["preset"]  # already lowercased above
 
+    # Pre-flight gate: refuse to submit if the estimator says this config
+    # needs more GPU time than the user has allocated. ZeroGPU charges actual
+    # usage, not declared duration, so under-allocating means the call still
+    # burns quota before timing out. Refuse here and tell the user to either
+    # bump the GPU-budget slider or reduce frames/preset.
+    user_budget: int | None = None
+    if "gpu_budget" in inputs and inputs["gpu_budget"] is not None:
+        user_budget = int(inputs["gpu_budget"])
+        estimate = backend_module._estimate_duration_unclamped(
+            mode=mode_name, preset=preset, frames=frames,
+        )
+        if estimate > user_budget:
+            yield (
+                f'<div class="status-card status-error">'
+                f'  <div class="status-row"><span class="status-stage">GPU budget too low</span></div>'
+                f"  <div>This config estimates ~{estimate}s of GPU time, but the "
+                f"GPU-budget slider is set to {user_budget}s. Raise the slider, drop "
+                f"the preset to Fast or Balanced, or reduce the duration / frame count.</div>"
+                f"</div>",
+                gr.update(),
+            )
+            return
+
     async def _translate(event, started_at):
         """Translate one backend event into Gradio (status_html, video) yields.
 
@@ -1008,7 +1047,7 @@ async def _on_generate(mode_name: str, *, progress: Any = None, **inputs: Any):
     started = time.time()
     async for event in backend.submit(
         mode_name, workflow,
-        preset=preset, duration_multiplier=1.0,
+        preset=preset, user_budget=user_budget,
         progress=progress,
     ):
         translated = await _translate(event, started)
@@ -1034,6 +1073,7 @@ def _input_keys_for_mode(mode_name: str, h: dict) -> list[str]:
         base.extend(["ic_lora", "ic_strength"])
     if h["lora"].pose_on is not None:
         base.append("pose_on")
+    base.append("gpu_budget")  # appended by build_app() from the global slider
     return base
 
 
