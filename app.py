@@ -871,6 +871,31 @@ def _seconds_to_frames(seconds: float, fps: int) -> int:
     return max(9, int(round(float(seconds) * float(fps) / 8) * 8) + 1)
 
 
+def _prune_old_outputs(output_dir: pathlib.Path, max_age_seconds: int = 4 * 3600) -> int:
+    """Delete files under *output_dir* older than *max_age_seconds*; return count.
+
+    HF Spaces ephemeral disk is 150 GB and preload already eats ~111 GB. Without
+    this sweep, generations accumulate in `~/comfyui/output/` until the disk
+    fills and the replica goes unhealthy (observed: stuck `RUNNING` with
+    `replicas.current=0`). Per-file OSError is swallowed so one bad file
+    doesn't abort a sweep that would otherwise free space.
+    """
+    if not output_dir.exists():
+        return 0
+    cutoff = time.time() - max_age_seconds
+    deleted = 0
+    for f in output_dir.rglob("*"):
+        try:
+            if not f.is_file():
+                continue
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+                deleted += 1
+        except OSError:
+            continue
+    return deleted
+
+
 async def _on_generate(mode_name: str, *, progress: Any = None, **inputs: Any):
     """Generate handler — async generator yielding (status_html, video_path).
 
@@ -879,6 +904,13 @@ async def _on_generate(mode_name: str, *, progress: Any = None, **inputs: Any):
     Spaces; we forward it to the backend so ComfyUI's per-step counter renders
     a real progress bar instead of a generic Gradio spinner.
     """
+    _comfy_dir_now = (
+        (pathlib.Path.home() / "comfyui")
+        if _on_spaces()
+        else pathlib.Path(__file__).parent / "comfyui"
+    )
+    _prune_old_outputs(_comfy_dir_now / "output")
+
     mode = modes.MODE_REGISTRY[mode_name]
 
     fps = int(inputs.get("fps", 24))
