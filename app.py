@@ -356,6 +356,37 @@ _CUSTOM_CSS = """
     color: #7C8693;
 }
 
+/* Discord callout — drawer-bottom community button. Warm amber-on-slate
+   to match the Topaz palette; the arrow nudges right on hover so it
+   reads as actionable without screaming. */
+.aio-discord-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin: 4px 0;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #1F2630 0%, #1A1F26 100%);
+    border: 1px solid #2C3340;
+    color: #E0A458 !important;
+    font-size: 12.5px;
+    font-weight: 500;
+    text-decoration: none !important;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.aio-discord-btn:hover {
+    border-color: #E0A458;
+    background: linear-gradient(135deg, #242C37 0%, #1F2630 100%);
+}
+.aio-discord-btn:hover .aio-discord-arrow { transform: translateX(3px); }
+.aio-discord-glyph { font-size: 14px; line-height: 1; }
+.aio-discord-arrow {
+    margin-left: auto;
+    color: #7C8693;
+    transition: transform 0.15s ease, color 0.15s ease;
+}
+.aio-discord-btn:hover .aio-discord-arrow { color: #E0A458; }
+
 /* === Status banner === */
 .status-card {
     padding: 12px 16px;
@@ -506,7 +537,9 @@ def build_app() -> gr.Blocks:
             '<strong>Drop a <span class="aio-heart">♥</span> at the top</strong> to support it '
             '· '
             'Follow <a href="https://huggingface.co/techfreakworm" target="_blank" rel="noopener noreferrer">@techfreakworm</a> '
-            'for what\'s next.'
+            'for what\'s next '
+            '· '
+            '<a href="https://discord.gg/qbn3exeEXa" target="_blank" rel="noopener noreferrer">Chat with the maker on Discord</a>'
             '</div>'
         )
 
@@ -545,6 +578,15 @@ def build_app() -> gr.Blocks:
                     "Set `LTX23_AIO_VRAM=lowvram|normalvram|highvram` to override "
                     "the auto-detected VRAM tier.",
                     elem_classes=["aio-model-badge"],
+                )
+                gr.Markdown("Community", elem_classes=["aio-drawer-heading"])
+                gr.HTML(
+                    '<a class="aio-discord-btn" href="https://discord.gg/qbn3exeEXa" '
+                    'target="_blank" rel="noopener noreferrer">'
+                    '<span class="aio-discord-glyph">✨</span>'
+                    '<span>Chat with the maker on Discord</span>'
+                    '<span class="aio-discord-arrow">→</span>'
+                    '</a>'
                 )
 
             # Body — unchanged, still hosts the 6 mode tabs.
