@@ -93,49 +93,33 @@ def _frames_from_workflow(workflow: dict) -> int:
     return 121
 
 
-def _estimate_duration_unclamped(*, mode: str, preset: str, frames: int) -> int:
-    """Estimator formula minus the 60 s floor.
-
-    Used by the UI's pre-flight gate so it can show "this config needs ~Xs"
-    without re-implementing the constants in app.py.
-    """
-    base = _BASE_DURATION_S.get(mode, 180)
-    mult = _PRESET_MULT.get(preset.lower(), 1.5)
-    return int(base * mult + 60 + frames * 0.3)
-
-
 def _duration_for(
     executor: Any,
     workflow: dict,
     output_ids: list[str],
     mode: str,
     preset: str,
+    multiplier: float = 1.0,
     progress: Any = None,
-    user_budget: int | None = None,
 ) -> int:
-    """ZeroGPU per-call duration. Same signature as _execute_workflow.
+    """ZeroGPU duration estimator. Same signature as _execute_workflow.
 
-    `progress` is a `gr.Progress` instance forwarded by the caller; we ignore it
-    here but must accept it so ZeroGPU calls us with the same arg list it uses
-    for `_execute_workflow`.
+    `progress` is a gr.Progress instance forwarded by the caller; we ignore it
+    here (estimator doesn't emit progress) but must accept it positionally so
+    ZeroGPU can call us with the same arg list it'll use for _execute_workflow.
 
-    When `user_budget` is set, it overrides the estimator — the user has decided
-    how much of their ZeroGPU quota to spend on this call. Clamped to ≥ 60 s
-    (HF's documented per-call floor); no upper clamp, so the user can declare
-    up to whatever their account tier actually allows. If they exceed the
-    account cap, HF raises "ZeroGPU illegal duration" and the UI surfaces it
-    via the `illegal_duration` friendly-error category.
-
-    Without `user_budget`, returns the unclamped estimate (base × preset
-    multiplier + cold-cache buffer + per-frame VAE decode). The pre-flight
-    gate in app.py refuses calls whose estimate exceeds the user-chosen
-    budget — so by the time we get here, either the user opted in or there
-    was no override.
+    Estimate = (base × preset multiplier + cold-cache buffer + per-frame VAE
+    decode time) × retry multiplier, clamped to [60s, 240s]. ZeroGPU rejects
+    durations above the server's per-call max with "ZeroGPU illegal duration"
+    (client.py:137); 240s is observed to work for Pro identity (~2 min runs
+    needed for style + lipsync detailer paths). If the server rejects values
+    in this range, the user will see a clear error and can retry.
     """
-    if user_budget is not None:
-        return max(60, int(user_budget))
+    base = _BASE_DURATION_S.get(mode, 180)
+    mult = _PRESET_MULT.get(preset.lower(), 1.5)
     frames = _frames_from_workflow(workflow)
-    return max(60, _estimate_duration_unclamped(mode=mode, preset=preset, frames=frames))
+    est = int((base * mult + 60 + frames * 0.3) * multiplier)
+    return max(60, min(est, 240))
 
 
 # Decorate at module load time so ZeroGPU's startup analyzer detects it.
@@ -153,14 +137,14 @@ def _execute_workflow(
     output_ids: list[str],
     mode: str,
     preset: str,
+    multiplier: float = 1.0,
     progress: Any = None,
-    user_budget: int | None = None,
 ) -> str:
     """Run the workflow on GPU and return the path of the first video output.
 
     Returns just the video path (a plain string, picklable across the
-    @spaces.GPU subprocess boundary). The `mode`, `preset`, and `user_budget`
-    args are consumed by `_duration_for` to set the per-call GPU slot.
+    @spaces.GPU subprocess boundary). The `mode`, `preset`, and `multiplier`
+    args are consumed by `_duration_for` to estimate the GPU slot to reserve.
 
     `progress` is an optional `gr.Progress` instance. It's the only progress
     channel that crosses the @spaces.GPU subprocess boundary on HF Spaces —
@@ -400,15 +384,15 @@ class ComfyUILibraryBackend:
         workflow: dict,
         *,
         preset: str = "balanced",
-        user_budget: int | None = None,
+        duration_multiplier: float = 1.0,
         gpu_duration: int = 0,  # legacy, ignored (now derived from preset+frames)
         progress: Any = None,
     ) -> AsyncIterator[Any]:
         """Run a workflow end-to-end. Yields Download/Progress/Output/Error events.
 
-        `preset` and `user_budget` flow through to the @spaces.GPU duration
-        estimator. When `user_budget` is set the user has opted in to a
-        specific per-call GPU time cap; otherwise the estimator picks one.
+        `preset` and `duration_multiplier` flow through to the @spaces.GPU
+        duration estimator. The handler can re-call submit() with
+        duration_multiplier=2.0 if the first attempt aborts on timeout.
         """
         # Pre-flight: ensure all model files exist.
         try:
@@ -483,7 +467,7 @@ class ComfyUILibraryBackend:
                 # light calls get fast queue priority while heavy ones reserve
                 # real headroom. Off-Spaces it's a plain call.
                 video_path = _execute_workflow(
-                    self._executor, workflow, output_ids, mode, preset, progress, user_budget,
+                    self._executor, workflow, output_ids, mode, preset, duration_multiplier, progress,
                 )
                 # Fallback: if history_result didn't surface a path (rare on
                 # Spaces — happens when ZeroGPU's subprocess boundary drops
