@@ -913,6 +913,12 @@ _FRIENDLY_ERRORS: dict[str, tuple[str, str]] = {
         "Model download failed",
         "Couldn't fetch a required model file. Check your internet and try again.",
     ),
+    "no_output": (
+        "Finished without a video",
+        "The workflow ran but wrote no file — usually a model that failed to "
+        "load partway through. Check the Space logs for a 'not found' line, "
+        "then click Generate to retry.",
+    ),
 }
 
 

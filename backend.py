@@ -44,7 +44,8 @@ class OutputEvent:
 
 @dataclass
 class ErrorEvent:
-    category: str  # "oom" | "zerogpu_timeout" | "execution" | "interrupt" | "download"
+    # "oom" | "zerogpu_timeout" | "execution" | "interrupt" | "download" | "no_output"
+    category: str
     message: str
     stage: int | None = None
     traceback: str = ""
@@ -480,7 +481,20 @@ class ComfyUILibraryBackend:
                     file=sys.stderr,
                     flush=True,
                 )
-                _push(OutputEvent(video_path=video_path))
+                if video_path:
+                    _push(OutputEvent(video_path=video_path))
+                else:
+                    # A node can die mid-graph (a model that won't load is the
+                    # common case) without raising into this thread — ComfyUI
+                    # logs it and returns normally. Pushing an OutputEvent with
+                    # an empty path made that read as success: the UI cleared
+                    # its status and reset with nothing to show.
+                    _push(
+                        ErrorEvent(
+                            category="no_output",
+                            message="workflow finished without writing a video file",
+                        )
+                    )
             except Exception as exc:
                 tb_text = tb_mod.format_exc()
                 print(f"[backend] worker exception:\n{tb_text}", file=sys.stderr, flush=True)
