@@ -132,7 +132,7 @@ def fake_hf_cache(tmp_path: pathlib.Path) -> pathlib.Path:
     layouts = {
         "models--Lightricks--LTX-2.3": [
             "ltx-2.3-22b-distilled.safetensors",
-            "ltx-2.3-spatial-upscaler-x2-1.0.safetensors",
+            "ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
             "ltx-2.3-22b-distilled-lora-384.safetensors",
         ],
         "models--google--gemma-3-12b-it-qat-q4_0-unquantized": [

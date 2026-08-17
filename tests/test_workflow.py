@@ -1,5 +1,7 @@
 """Unit tests for workflow.py — pure functions over JSON dicts."""
 
+import json
+
 import pytest
 
 import workflow
@@ -55,6 +57,23 @@ def test_validate_rejects_orphan_link():
     wf["links"].append([99999, 1, 0, 999_999_999, 0, "INT"])  # destination doesn't exist
     with pytest.raises(ValueError, match="orphan link"):
         workflow.validate(wf)
+
+
+def test_load_template_remaps_retired_upscaler_filename():
+    """Lightricks deleted the x2 spatial upscaler v1.0; templates still name it."""
+    for mode in workflow.VALID_MODES:
+        wf = workflow.load_template(mode)
+        assert wf["101"]["inputs"]["model_name"] == "ltx-2.3-spatial-upscaler-x2-1.1.safetensors", (
+            f"{mode} still loads a retired upscaler"
+        )
+
+
+def test_load_template_leaves_no_retired_filenames_in_any_mode():
+    """No retired model filename may reach the workflow handed to PromptExecutor."""
+    for mode in workflow.VALID_MODES:
+        serialized = json.dumps(workflow.load_template(mode))
+        for retired in ("ltx-2.3-spatial-upscaler-x2-1.0.safetensors",):
+            assert retired not in serialized, f"{mode} references retired {retired}"
 
 
 def test_set_input_handles_dict_widgets_values():

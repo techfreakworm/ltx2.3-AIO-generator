@@ -34,7 +34,9 @@ MODEL_REGISTRY: dict[str, ModelEntry] = {
     # Main LTX 2.3 transformer + LoRAs + upscalers
     "ltx-2.3-22b-distilled.safetensors": ModelEntry("Lightricks/LTX-2.3", comfy_type="checkpoints"),
     "ltx-2.3-22b-dev.safetensors": ModelEntry("Lightricks/LTX-2.3", comfy_type="checkpoints"),
-    "ltx-2.3-spatial-upscaler-x2-1.0.safetensors": ModelEntry(
+    # v1.0 was deleted upstream on 2026-08-10; workflow.RETIRED_MODEL_RENAMES
+    # rewrites the templates' references to this name.
+    "ltx-2.3-spatial-upscaler-x2-1.1.safetensors": ModelEntry(
         "Lightricks/LTX-2.3", comfy_type="latent_upscale_models"
     ),
     "ltx-2.3-22b-distilled-lora-384.safetensors": ModelEntry(
