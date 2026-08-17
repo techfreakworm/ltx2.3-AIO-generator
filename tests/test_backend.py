@@ -4,6 +4,7 @@ import pathlib
 import sys
 import types
 
+import gradio as gr
 import pytest
 
 import backend
@@ -22,6 +23,28 @@ def test_progress_event_dataclasses_exist():
     assert hasattr(backend, "ProgressEvent")
     assert hasattr(backend, "OutputEvent")
     assert hasattr(backend, "ErrorEvent")
+
+
+def test_classify_detects_illegal_duration_from_the_error_title():
+    """spaces raises gr.Error(message, title='ZeroGPU illegal duration').
+
+    The discriminating words are only in the title; str(exc) is the message
+    alone, so matching on the message can never see them.
+    """
+    exc = gr.Error(
+        "The requested GPU duration (360s) is larger than the maximum allowed",
+        title="ZeroGPU illegal duration",
+    )
+    assert backend._classify(exc) == "illegal_duration"
+
+
+def test_classify_still_detects_gpu_timeout_from_the_message():
+    assert backend._classify(gr.Error("GPU task aborted")) == "gpu_timeout"
+
+
+def test_classify_still_detects_expired_token_from_the_message():
+    exc = gr.Error("Expired ZeroGPU proxy token", title="ZeroGPU client error")
+    assert backend._classify(exc) == "expired_token"
 
 
 def _stub_comfy_utils(monkeypatch) -> None:

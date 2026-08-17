@@ -540,7 +540,12 @@ class ComfyUILibraryBackend:
 
 def _classify(exc: Exception) -> str:
     name = type(exc).__name__.lower()
-    msg = str(exc).lower()
+    # spaces raises gr.Error(message, title="ZeroGPU illegal duration") — the
+    # words that identify the failure are in the title, and str(exc) returns the
+    # message alone, so the title has to be folded in or the category is
+    # unreachable (spaces/zero/client.py:166, spaces/zero/gradio.py:171-178).
+    title = getattr(exc, "title", "") or ""
+    msg = f"{title} {exc}".lower()
     if "outofmemory" in name or "cuda out of memory" in msg:
         return "oom"
     if "expired zerogpu proxy token" in msg or "expired" in msg and "token" in msg:
