@@ -634,6 +634,16 @@ def _render_model_status() -> str:
         be = _get_backend()  # ensure ComfyUI is loaded
     except Exception as exc:
         return f'<div class="aio-model-badge">backend not ready<br>{exc}</div>'
+    if _on_spaces():
+        # Probing VRAM from here would land in comfy's get_free_memory ->
+        # torch.cuda.mem_get_info, which ZeroGPU's emulation does not intercept;
+        # it raises out of torch._C._cuda_init instead. The GPU only exists
+        # inside the @spaces.GPU fork, so there is nothing to measure here.
+        return (
+            '<div class="aio-model-badge">device: ZeroGPU (CUDA)<br>'
+            "loaded: inside the GPU worker<br>"
+            "free: managed by ZeroGPU</div>"
+        )
     try:
         import comfy.model_management as mm
         import torch
@@ -676,6 +686,14 @@ def _render_model_status() -> str:
 
 
 def _unload_models() -> str:
+    if _on_spaces():
+        # Models are loaded inside the @spaces.GPU fork and die with it, so this
+        # process has nothing to free — and both comfy's unloader and
+        # torch.cuda.empty_cache() trip ZeroGPU's CUDA emulation guard here.
+        return (
+            '<div class="aio-model-badge">nothing to unload<br>'
+            "ZeroGPU frees VRAM when each run ends</div>"
+        )
     try:
         import comfy.model_management as mm
         import torch

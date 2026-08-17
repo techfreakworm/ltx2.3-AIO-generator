@@ -547,7 +547,15 @@ def _classify(exc: Exception) -> str:
 
 
 def _free_memory() -> None:
-    """Free VRAM after a workflow finishes (success or failure)."""
+    """Free VRAM after a workflow finishes (success or failure).
+
+    Runs in the submit() worker thread, i.e. the main process — outside the
+    @spaces.GPU fork. On ZeroGPU that fork already took its VRAM with it, and
+    every call here would only reach torch._C._cuda_init through the emulation
+    layer, so there is nothing to do.
+    """
+    if _on_spaces():
+        return
     try:
         import comfy.model_management as mm
 
