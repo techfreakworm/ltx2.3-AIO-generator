@@ -29,6 +29,23 @@ def test_walk_workflow_for_models_finds_t2v_loaders():
     assert any("gemma" in name.lower() for name in needed)
 
 
+def test_model_registry_has_no_retired_filenames():
+    """A registry key that 404s on the Hub makes every generation abort mid-graph."""
+    assert "ltx-2.3-spatial-upscaler-x2-1.0.safetensors" not in models.MODEL_REGISTRY
+    assert "ltx-2.3-spatial-upscaler-x2-1.1.safetensors" in models.MODEL_REGISTRY
+    entry = models.MODEL_REGISTRY["ltx-2.3-spatial-upscaler-x2-1.1.safetensors"]
+    assert entry.repo_id == "Lightricks/LTX-2.3"
+    assert entry.comfy_type == "latent_upscale_models"
+
+
+def test_walk_workflow_for_models_requests_current_upscaler_for_every_mode():
+    """The download pass must fetch the upscaler the workflow actually loads."""
+    for mode in workflow.VALID_MODES:
+        needed = models.walk_workflow_for_models(workflow.load_template(mode))
+        assert "ltx-2.3-spatial-upscaler-x2-1.1.safetensors" in needed
+        assert "ltx-2.3-spatial-upscaler-x2-1.0.safetensors" not in needed
+
+
 def test_ensure_models_creates_symlinks_local(tmp_path, monkeypatch, fake_hf_cache):
     """In local mode, ensure_models creates symlinks from comfy/models -> HF cache."""
     monkeypatch.setenv("HF_HUB_CACHE", str(fake_hf_cache))
