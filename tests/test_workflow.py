@@ -154,3 +154,100 @@ def test_set_input_patches_one_named_field_of_vhs_audio_node():
     assert {k: v for k, v in after.items() if k != "audio"} == {
         k: v for k, v in before.items() if k != "audio"
     }
+
+
+_POWER_LORA = "Power Lora Loader (rgthree)"
+
+
+def _lora_rows(wf):
+    """`(node_id, input key, row)` for every Power Lora Loader row in *wf*."""
+    return [
+        (node_id, key, row)
+        for node_id, node in wf.items()
+        if node.get("class_type") == _POWER_LORA
+        for key, row in node["inputs"].items()
+        if isinstance(row, dict) and "on" in row and "lora" in row
+    ]
+
+
+def _is_camera_lora(row):
+    return "camera-control" in str(row["lora"]).lower()
+
+
+@pytest.mark.parametrize("mode", workflow.VALID_MODES)
+def test_load_template_enables_no_camera_control_lora(mode):
+    """The UI's Camera control is not wired to the loader, so "none" must mean none."""
+    rows = _lora_rows(workflow.load_template(mode))
+    assert rows, f"{mode}: no Power Lora Loader rows found"
+    enabled = [
+        (nid, key, row["lora"]) for nid, key, row in rows if _is_camera_lora(row) and row["on"]
+    ]
+    assert enabled == []
+
+
+@pytest.mark.parametrize("mode", workflow.VALID_MODES)
+def test_load_template_keeps_non_camera_lora_rows_as_exported(mode):
+    """Only a camera row's `on` may differ from the export; nothing else is switched off."""
+    raw = json.loads((workflow.WORKFLOWS_DIR / f"{mode}.json").read_text())
+    raw_rows = {(nid, key): row for nid, key, row in _lora_rows(raw)}
+    loaded_rows = {(nid, key): row for nid, key, row in _lora_rows(workflow.load_template(mode))}
+    assert loaded_rows.keys() == raw_rows.keys()
+
+    for where, raw_row in raw_rows.items():
+        expected = dict(raw_row)
+        expected["lora"] = workflow.RETIRED_MODEL_RENAMES.get(raw_row["lora"], raw_row["lora"])
+        actual = dict(loaded_rows[where])
+        if _is_camera_lora(raw_row):
+            del expected["on"], actual["on"]
+        assert actual == expected, f"{mode}: row {where} changed"
+
+    assert any(row["on"] for row in loaded_rows.values() if not _is_camera_lora(row))
+
+
+def test_load_template_switches_off_only_enabled_power_lora_camera_rows(tmp_path, monkeypatch):
+    """Matched by node type, row shape and filename, so a re-export can renumber freely."""
+    camera_on = {
+        "on": True,
+        "lora": "LTX-2-19B-LoRA-Camera-Control-Dolly-In.safetensors",
+        "strength": 0.8,
+    }
+    template = {
+        "7": {
+            "class_type": _POWER_LORA,
+            "inputs": {
+                "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
+                "lora_9": camera_on,
+                "lora_2": {
+                    "on": False,
+                    "lora": "ltx-2-19b-lora-camera-control-jib-up.safetensors",
+                    "strength": 1,
+                },
+                "lora_4": {
+                    "on": True,
+                    "lora": "ltx-2.3-22b-distilled-lora-384.safetensors",
+                    "strength": 0.6,
+                },
+                "➕ Add Lora": "",
+                "model": ["8", 0],
+            },
+        },
+        "8": {
+            "class_type": "Some Other Lora Stack",
+            "inputs": {
+                "lora_1": {
+                    "on": True,
+                    "lora": "ltx-2-19b-lora-camera-control-dolly-out.safetensors",
+                    "strength": 1,
+                },
+                "lora_name": "ltx-2-19b-lora-camera-control-dolly-left.safetensors",
+            },
+        },
+    }
+    (tmp_path / "lipsync.json").write_text(json.dumps(template))
+    monkeypatch.setattr(workflow, "WORKFLOWS_DIR", tmp_path)
+
+    loaded = workflow.load_template("lipsync")
+
+    expected = json.loads(json.dumps(template))
+    expected["7"]["inputs"]["lora_9"]["on"] = False
+    assert loaded == expected

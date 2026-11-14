@@ -41,13 +41,35 @@ def _rename_retired_models(value: Any) -> Any:
     return value
 
 
+# The export freezes whatever LoRA rows were toggled in the editor, and lipsync
+# shipped with the dolly-in camera LoRA on, so every lipsync run pushed in. The
+# UI's Camera control is not wired to this node, so "none" has to mean none.
+_POWER_LORA_LOADER = "Power Lora Loader (rgthree)"
+
+
+def _disable_camera_loras(workflow: dict[str, Any]) -> dict[str, Any]:
+    """Return *workflow* with every camera-control Power Lora Loader row switched off."""
+    for node in workflow.values():
+        if not isinstance(node, dict) or node.get("class_type") != _POWER_LORA_LOADER:
+            continue
+        for row in (node.get("inputs") or {}).values():
+            if (
+                isinstance(row, dict)
+                and "on" in row
+                and "lora" in row
+                and "camera-control" in str(row["lora"]).lower()
+            ):
+                row["on"] = False
+    return workflow
+
+
 def load_template(mode: str) -> dict[str, Any]:
     """Load a fresh, independent copy of the named mode's API workflow template."""
     if mode not in VALID_MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {VALID_MODES}")
     path = WORKFLOWS_DIR / f"{mode}.json"
     template = copy.deepcopy(json.loads(path.read_text()))
-    return _rename_retired_models(template)
+    return _disable_camera_loras(_rename_retired_models(template))
 
 
 def set_input(workflow: dict[str, Any], node_id: int | str, field: str, value: Any) -> None:

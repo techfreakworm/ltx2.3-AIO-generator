@@ -92,3 +92,10 @@ def test_ensure_models_skips_unregistered_files_with_warning(
 
     # Should not raise, should log a warning, should yield no events for the missing entry.
     assert any("nonexistent_phantom_file" in record.message for record in caplog.records)
+
+
+def test_walk_workflow_for_models_requests_no_camera_control_lora_for_lipsync():
+    """A camera LoRA that load_template switches off must not be downloaded either."""
+    needed = models.walk_workflow_for_models(workflow.load_template("lipsync"))
+    assert [name for name in needed if "camera-control" in name.lower()] == []
+    assert any("distilled-lora" in name for name in needed)
