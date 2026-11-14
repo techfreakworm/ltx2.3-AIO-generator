@@ -114,6 +114,7 @@ def canonical_inputs() -> dict[str, dict[str, Any]]:
         },
         "style": {
             "prompt": "in the style of a renaissance oil painting",
+            "image": "/tmp/style_reference.png",
             "input_video": "/tmp/source.mp4",
             "preset": "balanced",
             "frames": 81,
@@ -154,5 +155,6 @@ def fake_hf_cache(tmp_path: pathlib.Path) -> pathlib.Path:
         snapshot_dir = hub / repo / "snapshots" / "deadbeef"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         for filename in files:
-            (snapshot_dir / filename).write_text("")  # placeholder
+            # ensure_models' cache scan skips files of 64 bytes or less as HF 404 stubs.
+            (snapshot_dir / filename).write_bytes(b"\0" * 128)
     return hub

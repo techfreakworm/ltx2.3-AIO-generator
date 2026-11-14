@@ -6,6 +6,45 @@ import modes
 import workflow
 
 
+def _is_link(value):
+    """API-format link input: `[<source node id str>, <output slot int>]`."""
+    return (
+        isinstance(value, list)
+        and len(value) == 2
+        and isinstance(value[0], str)
+        and isinstance(value[1], int)
+        and not isinstance(value[1], bool)
+    )
+
+
+def _assert_patches_apply_to_template(mode_name, patches):
+    """Every patch must hit an existing literal input of a node in the real template."""
+    assert len(patches) > 0
+    wf = workflow.load_template(mode_name)
+    node_count = len(wf)
+
+    for node_id, field, _value in patches:
+        assert isinstance(node_id, str), f"node id {node_id!r} is not a str"
+        assert isinstance(field, str), f"field {field!r} is not a str"
+        assert node_id in wf, f"{mode_name}: patch targets missing node {node_id!r}"
+        inputs = wf[node_id]["inputs"]
+        class_type = wf[node_id]["class_type"]
+        # set_input creates unknown fields silently, so a misspelt field would go unnoticed.
+        assert field in inputs, f"{mode_name}: {class_type} {node_id!r} has no input {field!r}"
+        assert not _is_link(inputs[field]), (
+            f"{mode_name}: patch would cut the graph link at {node_id!r}.{field}"
+        )
+
+    for patch in patches:
+        workflow.set_input(wf, *patch)
+
+    assert len(wf) == node_count
+    expected = {(node_id, field): value for node_id, field, value in patches}
+    assert len(expected) == len(patches), f"{mode_name}: two patches write the same input"
+    for (node_id, field), value in expected.items():
+        assert wf[node_id]["inputs"][field] == value
+
+
 def test_mode_dataclass_has_expected_fields():
     """Mode dataclass exposes the expected attribute set."""
     fields = {"name", "label", "icon", "parameterize_fn", "stage_map"}
@@ -23,16 +62,7 @@ def test_t2v_parameterize_produces_valid_patches(canonical_inputs):
     mode = modes.MODE_REGISTRY["t2v"]
     patches = mode.parameterize_fn(inputs)
 
-    # All patches must be (node_id: int, widget_index: int, value: Any)
-    for node_id, widget_index, _value in patches:
-        assert isinstance(node_id, int)
-        assert isinstance(widget_index, int)
-
-    # Apply patches to a real template; result must validate.
-    wf = workflow.load_template("t2v")
-    for patch in patches:
-        workflow.set_input(wf, *patch)
-    workflow.validate(wf)
+    _assert_patches_apply_to_template("t2v", patches)
 
 
 def test_i2v_parameterize_uses_image_path(canonical_inputs):
@@ -49,17 +79,12 @@ def test_t2v_and_i2v_in_registry():
     assert "i2v" in modes.MODE_REGISTRY
 
 
-@pytest.mark.parametrize("mode_name", ["a2v", "lipsync", "keyframe", "style"])
+@pytest.mark.parametrize("mode_name", ["i2v", "a2v", "lipsync", "keyframe", "style"])
 def test_remaining_modes_parameterize_validates(mode_name, canonical_inputs):
     inputs = canonical_inputs[mode_name]
     mode = modes.MODE_REGISTRY[mode_name]
     patches = mode.parameterize_fn(inputs)
-    assert len(patches) > 0
-
-    wf = workflow.load_template(mode_name)
-    for patch in patches:
-        workflow.set_input(wf, *patch)
-    workflow.validate(wf)
+    _assert_patches_apply_to_template(mode_name, patches)
 
 
 def test_a2v_parameterize_passes_audio_path(canonical_inputs):

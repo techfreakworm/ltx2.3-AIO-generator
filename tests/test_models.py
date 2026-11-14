@@ -66,11 +66,15 @@ def test_ensure_models_creates_symlinks_local(tmp_path, monkeypatch, fake_hf_cac
     }
     list(models.ensure_models(needed))
 
-    # Each requested file should now have a symlink in comfyui/models/<type>/
-    assert (comfy_models / "checkpoints" / "ltx-2.3-22b-distilled.safetensors").is_symlink()
-    assert (
-        comfy_models / "text_encoders" / "gemma-3-12b-it" / "model-00001-of-00005.safetensors"
-    ).is_symlink()
+    # Staging is flat, comfyui/models/<comfy_type>/<filename>: a registry
+    # subfolder is the file's path inside the HF repo, not part of the destination.
+    staged = [
+        comfy_models / "checkpoints" / "ltx-2.3-22b-distilled.safetensors",
+        comfy_models / "text_encoders" / "model-00001-of-00005.safetensors",
+    ]
+    for link in staged:
+        assert link.is_symlink(), f"{link} was not staged"
+        assert link.resolve().is_relative_to(fake_hf_cache.resolve())
 
 
 def test_ensure_models_skips_unregistered_files_with_warning(
