@@ -554,7 +554,9 @@ def _classify(exc: Exception) -> str:
         return "illegal_duration"
     if "unlogged user" in msg:
         return "unlogged"
-    if "exceeded your" in msg and "gpu" in msg:
+    # spaces titles every quota refusal "ZeroGPU quota exceeded", but most of the
+    # messages under that title never say "exceeded your ... GPU".
+    if "zerogpu quota exceeded" in msg or ("exceeded your" in msg and "gpu" in msg):
         return "quota_exceeded"
     # ZeroGPU enforces the @spaces.GPU(duration=N) cap and re-raises as
     # gradio.exceptions.Error('GPU task aborted').
