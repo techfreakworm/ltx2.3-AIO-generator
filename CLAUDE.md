@@ -82,7 +82,8 @@ The 10-entry cap on `preload_from_hub` is a hard HF limit. Total preload size ca
 - `_PRESET_MULT[preset]` — fast 1×, balanced 1.5×, quality 3×
 - `_frames_from_workflow(workflow)` — read from `EmptyLTXVLatentVideo` `length`
 - +60s cold-cache buffer, +0.3s/frame VAE decode
-- Clamped to `[60s, 900s]`
+- Balanced t2v/i2v capped at `_FREE_ACCOUNT_BALANCED_ASK_S` (198s) before the retry multiplier. A free account gets 300s of ZeroGPU a day, and ZeroGPU multiplies the ask by 1.5 on Blackwell nodes before checking it, so the old 231s ask (346s there) was refused before any GPU work.
+- Clamped to `[60s, 240s]`
 
 `@spaces.GPU(duration=_duration_for)` decorates `_execute_workflow` — ZeroGPU calls the estimator with the same args.
 

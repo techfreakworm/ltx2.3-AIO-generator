@@ -81,6 +81,10 @@ _BASE_DURATION_S: dict[str, int] = {
     "style": 360,     # extra: preprocessor (canny/dwpose/depth) + IC-LoRAs
 }
 _PRESET_MULT: dict[str, float] = {"fast": 1.0, "balanced": 1.5, "quality": 3.0}
+# A free account gets 300 s of ZeroGPU a day, and ZeroGPU multiplies the ask by
+# 1.5 on Blackwell nodes before checking it: Balanced t2v/i2v asked 231 s (346 s
+# there) and was refused before any GPU work. 198 x 1.5 = 297 fits.
+_FREE_ACCOUNT_BALANCED_ASK_S = 198
 
 
 def _frames_from_workflow(workflow: dict) -> int:
@@ -110,7 +114,8 @@ def _duration_for(
     ZeroGPU can call us with the same arg list it'll use for _execute_workflow.
 
     Estimate = (base × preset multiplier + cold-cache buffer + per-frame VAE
-    decode time) × retry multiplier, clamped to [60s, 240s]. ZeroGPU rejects
+    decode time, capped at _FREE_ACCOUNT_BALANCED_ASK_S for Balanced t2v/i2v)
+    × retry multiplier, clamped to [60s, 240s]. ZeroGPU rejects
     durations above the server's per-call max with "ZeroGPU illegal duration"
     (client.py:137); 240s is observed to work for Pro identity (~2 min runs
     needed for style + lipsync detailer paths). If the server rejects values
@@ -119,7 +124,10 @@ def _duration_for(
     base = _BASE_DURATION_S.get(mode, 180)
     mult = _PRESET_MULT.get(preset.lower(), 1.5)
     frames = _frames_from_workflow(workflow)
-    est = int((base * mult + 60 + frames * 0.3) * multiplier)
+    est = base * mult + 60 + frames * 0.3
+    if mode in ("t2v", "i2v") and preset.lower() == "balanced":
+        est = min(est, _FREE_ACCOUNT_BALANCED_ASK_S)
+    est = int(est * multiplier)
     return max(60, min(est, 240))
 
 

@@ -8,6 +8,8 @@ import gradio as gr
 import pytest
 
 import backend
+import modes
+import workflow
 
 # One output node, no model filenames, so submit()'s pre-flight download pass
 # finds nothing to fetch.
@@ -233,3 +235,63 @@ async def test_submit_prefers_recent_output_file_over_erroring(tmp_path, monkeyp
 
     assert [e.video_path for e in events if isinstance(e, backend.OutputEvent)] == [str(produced)]
     assert not any(isinstance(e, backend.ErrorEvent) for e in events)
+
+
+# GPU seconds _duration_for asks ZeroGPU for, per mode and preset, with multiplier 1.0.
+_GPU_ASK_S = {
+    "t2v": {"fast": 186, "balanced": 198, "quality": 240},
+    "i2v": {"fast": 186, "balanced": 198, "quality": 240},
+    "a2v": {"fast": 216, "balanced": 240, "quality": 240},
+    "lipsync": {"fast": 240, "balanced": 240, "quality": 240},
+    "keyframe": {"fast": 240, "balanced": 240, "quality": 240},
+    "style": {"fast": 240, "balanced": 240, "quality": 240},
+}
+# A free account's daily ZeroGPU allowance, and the factor ZeroGPU multiplies the
+# ask by on Blackwell nodes before checking it (spaces/zero/configs.json).
+_FREE_ACCOUNT_DAILY_S = 300
+_BLACKWELL_FACTOR = 1.5
+
+
+def _gpu_ask(mode, preset, inputs, multiplier=1.0):
+    """Call the estimator the way ZeroGPU does: _execute_workflow's positional arguments."""
+    wf = workflow.load_template(mode)
+    for patch in modes.MODE_REGISTRY[mode].parameterize_fn(inputs[mode]):
+        workflow.set_input(wf, *patch)
+    return backend._duration_for(None, wf, [], mode, preset, multiplier, None)
+
+
+@pytest.mark.parametrize(
+    ("mode", "preset", "expected"),
+    [(mode, preset, ask) for mode, row in _GPU_ASK_S.items() for preset, ask in row.items()],
+)
+def test_duration_for_asks_the_pinned_gpu_seconds(mode, preset, expected, canonical_inputs):
+    assert _gpu_ask(mode, preset, canonical_inputs) == expected
+
+
+@pytest.mark.parametrize("mode", ["t2v", "i2v"])
+def test_balanced_text_and_image_to_video_fit_a_free_account_on_blackwell(mode, canonical_inputs):
+    """A free account's request above 300 s is refused before any GPU work."""
+    ask = _gpu_ask(mode, "balanced", canonical_inputs)
+    assert round(ask * _BLACKWELL_FACTOR) <= _FREE_ACCOUNT_DAILY_S
+
+
+@pytest.mark.parametrize("mode", list(_GPU_ASK_S))
+def test_balanced_never_asks_less_than_fast(mode, canonical_inputs):
+    assert _gpu_ask(mode, "balanced", canonical_inputs) >= _gpu_ask(mode, "fast", canonical_inputs)
+
+
+@pytest.mark.parametrize("mode", list(_GPU_ASK_S))
+def test_duration_for_preset_name_is_case_insensitive(mode, canonical_inputs):
+    assert _gpu_ask(mode, "Balanced", canonical_inputs) == _gpu_ask(
+        mode, "balanced", canonical_inputs
+    )
+
+
+def test_duration_for_keeps_the_retry_multiplier_and_unknown_inputs_as_they_were(
+    canonical_inputs,
+):
+    assert _gpu_ask("t2v", "balanced", canonical_inputs, multiplier=2.0) == 240
+    assert _gpu_ask("t2v", "turbo", canonical_inputs) == 231
+
+    wf = workflow.load_template("t2v")
+    assert backend._duration_for(None, wf, [], "unknown-mode", "balanced", 1.0, None) == 240
