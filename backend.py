@@ -558,10 +558,21 @@ def _classify(exc: Exception) -> str:
         return "oom"
     if "expired zerogpu proxy token" in msg or "expired" in msg and "token" in msg:
         return "expired_token"
+    # spaces says these only to a caller it could not identify, whatever the title.
+    if (
+        "unlogged user" in msg
+        or "authenticate with a hugging face token" in msg
+        or "exceeded your zerogpu quota" in msg
+    ):
+        return "unlogged"
+    # The runs-limit sentence goes to any caller; only an API caller's suffix says
+    # it has an account. Every one seen on the Space carried the signed-out suffix.
+    if "runs limit" in msg and not (
+        "subscribe to hugging face pro" in msg or "add credits to keep using zerogpu" in msg
+    ):
+        return "unlogged"
     if "illegal duration" in msg:
         return "illegal_duration"
-    if "unlogged user" in msg:
-        return "unlogged"
     # spaces titles every quota refusal "ZeroGPU quota exceeded", but most of the
     # messages under that title never say "exceeded your ... GPU".
     if "zerogpu quota exceeded" in msg or ("exceeded your" in msg and "gpu" in msg):

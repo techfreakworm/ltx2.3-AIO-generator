@@ -68,6 +68,34 @@ def _html_string(html_contents: str, text_contents: str) -> str:
 _QUOTA = "ZeroGPU quota exceeded"
 _WAIT = "(240s requested vs. 12s left). Try again in 1:23:45"
 
+# spaces 0.51 wording. The first four are verbatim from the Space's runtime log on
+# 2026-11-15 (spaces 0.51.3); the rest follow schedule() in spaces 0.51.1
+# zero/client.py, which adds a suffix by account only for API callers.
+_SIGNED_OUT_RUNS_LIMIT_API = (
+    "You have exceeded your ZeroGPU runs limit. Authenticate with a Hugging Face token "
+    "for more quota - https://huggingface.co/settings/tokens"
+)
+_FREE_ACCOUNT_QUOTA_API = (
+    "You have exceeded your free ZeroGPU quota (279s requested vs. 21s left). Try again in "
+    "23:56:38. Subscribe to Hugging Face PRO to get 40 min of ZeroGPU quota a day - "
+    "https://huggingface.co/subscribe/pro?from=ZeroGPU"
+)
+_PRO_ACCOUNT_QUOTA_API = (
+    "You have exceeded your Pro ZeroGPU quota (360s requested vs. 184s left). Try again in "
+    "0:12:33. Add credits to keep using ZeroGPU. $1 for 10 minutes of ZeroGPU inference - "
+    "https://huggingface.co/settings/billing?add-credits=true"
+)
+_LARGER_THAN_ALLOWED = (
+    "The requested GPU duration (297s) is larger than the maximum allowedSubscribe to "
+    "Hugging Face PRO to allow GPU tasks up to 40 min - "
+    "https://huggingface.co/subscribe/pro?from=ZeroGPU"
+)
+_AUTHENTICATE_SUFFIX = (
+    "Authenticate with a Hugging Face token for more quota - https://huggingface.co/settings/tokens"
+)
+_RUNS_LIMIT_PAGE = "You have exceeded your ZeroGPU runs limit. "
+_NO_ACCOUNT_QUOTA_PAGE = f"You have exceeded your ZeroGPU quota {_WAIT}. "
+
 
 # Each exception is built the way spaces/zero/client.py:schedule raises it.
 @pytest.mark.parametrize(
@@ -96,13 +124,75 @@ _WAIT = "(240s requested vs. 12s left). Try again in 1:23:45"
         ),
         pytest.param(
             gr.Error("You have exceeded your runs limit.", title=_QUOTA),
-            "quota_exceeded",
+            "unlogged",
             id="quota-runs-limit-plain",
         ),
         pytest.param(
             _HTMLError("You have exceeded your runs limit.", title=_QUOTA),
-            "quota_exceeded",
+            "unlogged",
             id="quota-runs-limit-html",
+        ),
+        pytest.param(
+            gr.Error(_SIGNED_OUT_RUNS_LIMIT_API, title=_QUOTA),
+            "unlogged",
+            id="runs-limit-signed-out-api",
+        ),
+        pytest.param(
+            gr.Error(_RUNS_LIMIT_PAGE, title=_QUOTA),
+            "unlogged",
+            id="runs-limit-from-page",
+        ),
+        pytest.param(
+            gr.Error(
+                _RUNS_LIMIT_PAGE + "Subscribe to Hugging Face PRO to get 40 min of ZeroGPU "
+                "quota a day - https://huggingface.co/subscribe/pro?from=ZeroGPU",
+                title=_QUOTA,
+            ),
+            "quota_exceeded",
+            id="runs-limit-free-account-api",
+        ),
+        pytest.param(
+            gr.Error(
+                _RUNS_LIMIT_PAGE + "Add credits to keep using ZeroGPU. $1 for 10 minutes of "
+                "ZeroGPU inference - https://huggingface.co/settings/billing?add-credits=true",
+                title=_QUOTA,
+            ),
+            "quota_exceeded",
+            id="runs-limit-pro-account-api",
+        ),
+        pytest.param(
+            gr.Error(_NO_ACCOUNT_QUOTA_PAGE, title=_QUOTA),
+            "unlogged",
+            id="no-account-quota-from-page",
+        ),
+        pytest.param(
+            gr.Error(_NO_ACCOUNT_QUOTA_PAGE + _AUTHENTICATE_SUFFIX, title=_QUOTA),
+            "unlogged",
+            id="no-account-quota-api",
+        ),
+        pytest.param(
+            gr.Error(_FREE_ACCOUNT_QUOTA_API, title=_QUOTA),
+            "quota_exceeded",
+            id="free-account-quota-api",
+        ),
+        pytest.param(
+            gr.Error(_PRO_ACCOUNT_QUOTA_API, title=_QUOTA),
+            "quota_exceeded",
+            id="pro-account-quota-api",
+        ),
+        pytest.param(
+            gr.Error(_LARGER_THAN_ALLOWED, title="ZeroGPU illegal duration"),
+            "illegal_duration",
+            id="larger-than-allowed-names-no-caller",
+        ),
+        pytest.param(
+            gr.Error(
+                "The requested GPU duration (297s) is larger than the maximum allowed"
+                + _AUTHENTICATE_SUFFIX,
+                title="ZeroGPU illegal duration",
+            ),
+            "unlogged",
+            id="larger-than-allowed-signed-out-suffix",
         ),
         pytest.param(
             _HTMLError(

@@ -887,14 +887,20 @@ _FRIENDLY_ERRORS: dict[str, tuple[str, str]] = {
         "you'll keep your spot in the GPU queue.",
     ),
     "illegal_duration": (
-        "GPU budget too high",
-        "The estimator asked for more GPU time than the server allows. "
-        "Try Fast preset or a shorter video.",
+        "More GPU time than your account allows",
+        "If you are not signed in to Hugging Face, sign in at huggingface.co and "
+        "reload this page (API callers: send your Hugging Face token): signed-out "
+        "visitors get too little GPU time to run this app. If you are signed in "
+        "with a free account, try Text → Video or Image → Video with the Fast or "
+        "Balanced preset, which need the least GPU time; other modes and the "
+        "Quality preset usually need PRO.",
     ),
     "unlogged": (
-        "Sign-in not detected",
-        "Make sure you're signed into huggingface.co (top-right avatar), "
-        "then refresh this page. Pro accounts get 25 min of GPU per day.",
+        "Sign in to Hugging Face",
+        "Signed-out visitors get too little GPU time from Hugging Face to run this "
+        "app. Sign in at huggingface.co, reload this page and click Generate again "
+        "(API callers: send your Hugging Face token). A free account covers one "
+        "short Text → Video or Image → Video clip a day.",
     ),
     "quota_exceeded": (
         "Daily GPU quota used up",
