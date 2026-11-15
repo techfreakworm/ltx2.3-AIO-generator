@@ -43,7 +43,8 @@ def _rename_retired_models(value: Any) -> Any:
 
 # The export freezes whatever LoRA rows were toggled in the editor, and lipsync
 # shipped with the dolly-in camera LoRA on, so every lipsync run pushed in. The
-# UI's Camera control is not wired to this node, so "none" has to mean none.
+# UI's Camera control is not wired to this node, so no camera move may be left
+# on by an export; lipsync's static hold is added separately below.
 _POWER_LORA_LOADER = "Power Lora Loader (rgthree)"
 
 
