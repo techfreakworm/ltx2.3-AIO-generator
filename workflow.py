@@ -63,13 +63,47 @@ def _disable_camera_loras(workflow: dict[str, Any]) -> dict[str, Any]:
     return workflow
 
 
+# With every move switched off nothing pins the camera: lipsync drifts and pans
+# on its own, and on a smaller head the mouth stops moving. Static is the one
+# camera LoRA that means "hold"; 0.5 because at 1.0 the person walks toward the
+# camera on some seeds. rgthree applies any `lora_*` input but only ever exports
+# numbered `lora_N` keys, so this key cannot land on an exported row.
+_HOLD_CAMERA_KEY = "lora_hold_camera"
+_HOLD_CAMERA_ROW_BY_MODE: dict[str, dict[str, Any]] = {
+    "lipsync": {
+        "on": True,
+        "lora": "ltx-2-19b-lora-camera-control-static.safetensors",
+        "strength": 0.5,
+    },
+}
+
+
+def _hold_camera(workflow: dict[str, Any], mode: str) -> dict[str, Any]:
+    """Return *workflow* with the mode's static camera row added to its Power Lora Loader."""
+    row = _HOLD_CAMERA_ROW_BY_MODE.get(mode)
+    if row is None:
+        return workflow
+    loaders = [
+        node
+        for node in workflow.values()
+        if isinstance(node, dict) and node.get("class_type") == _POWER_LORA_LOADER
+    ]
+    if len(loaders) != 1:
+        raise ValueError(
+            f"{mode}: expected one {_POWER_LORA_LOADER} node to hold the camera, "
+            f"found {len(loaders)}"
+        )
+    loaders[0].setdefault("inputs", {})[_HOLD_CAMERA_KEY] = dict(row)
+    return workflow
+
+
 def load_template(mode: str) -> dict[str, Any]:
     """Load a fresh, independent copy of the named mode's API workflow template."""
     if mode not in VALID_MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {VALID_MODES}")
     path = WORKFLOWS_DIR / f"{mode}.json"
     template = copy.deepcopy(json.loads(path.read_text()))
-    return _disable_camera_loras(_rename_retired_models(template))
+    return _hold_camera(_disable_camera_loras(_rename_retired_models(template)), mode)
 
 
 def set_input(workflow: dict[str, Any], node_id: int | str, field: str, value: Any) -> None:

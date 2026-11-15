@@ -199,7 +199,10 @@ After templates regenerate, the node-id constants in `modes.py` (e.g., `T2V_NODE
 
 The user has explicitly said **don't change JSON** — when adding capabilities, prefer parameterize_fn patches over hand-edits. The user re-exports from ComfyUI editor when the workflow changes.
 
-**Camera-control LoRA rows are forced off in `workflow.load_template`.** The export freezes whatever `Power Lora Loader (rgthree)` rows were toggled in the editor, and `lipsync.json` shipped with the dolly-in row on, so every lipsync run pushed in while the UI said Camera: none. `_disable_camera_loras` switches off any row whose LoRA filename contains `camera-control`, matched by node type and row shape, not by node id or row key, so a re-export cannot bring the bug back. To give users camera moves, wire the UI Camera control through `parameterize_fn`; do not re-enable a row in the export.
+**Camera-control LoRA rows are normalised in `workflow.load_template`, never in the export.**
+- Camera moves (dolly, jib) are forced off in every mode by `_disable_camera_loras`. The export freezes whatever `Power Lora Loader (rgthree)` rows were toggled in the editor, and `lipsync.json` shipped with dolly-in on while the UI said Camera: none. Rows are matched by node type, row shape and filename, never by node id or row key.
+- Lipsync then holds the camera with `ltx-2-19b-lora-camera-control-static.safetensors` at strength 0.5, added under its own `lora_hold_camera` key by `_hold_camera`. Without it nothing pins the camera, and on a smaller head the mouth stops moving. At 1.0 the person walks toward the camera on some seeds.
+- Every model-set computation goes through `load_template`, so downloads follow automatically. To give users camera moves, wire the UI Camera control through `parameterize_fn`; do not re-enable a row in the export.
 
 ---
 

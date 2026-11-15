@@ -1,6 +1,9 @@
 """Unit tests for models.py — MODEL_REGISTRY and ensure_models_for_mode."""
 
+import pytest
+
 import models
+import modes
 import workflow
 
 
@@ -94,8 +97,40 @@ def test_ensure_models_skips_unregistered_files_with_warning(
     assert any("nonexistent_phantom_file" in record.message for record in caplog.records)
 
 
-def test_walk_workflow_for_models_requests_no_camera_control_lora_for_lipsync():
-    """A camera LoRA that load_template switches off must not be downloaded either."""
-    needed = models.walk_workflow_for_models(workflow.load_template("lipsync"))
-    assert [name for name in needed if "camera-control" in name.lower()] == []
-    assert any("distilled-lora" in name for name in needed)
+_STATIC_CAMERA = "ltx-2-19b-lora-camera-control-static.safetensors"
+
+
+def _camera_files(names):
+    return {name for name in names if "camera-control" in name.lower()}
+
+
+@pytest.mark.parametrize("mode", workflow.VALID_MODES)
+def test_mode_model_sets_fetch_only_the_camera_lora_the_mode_loads(
+    mode, monkeypatch, canonical_inputs
+):
+    """Lipsync needs the static LoRA and never dolly-in; no other mode needs a camera LoRA."""
+    expected = {_STATIC_CAMERA} if mode == "lipsync" else set()
+
+    # backend.submit's pre-flight walks the parameterised workflow.
+    wf = workflow.load_template(mode)
+    for patch in modes.MODE_REGISTRY[mode].parameterize_fn(canonical_inputs[mode]):
+        workflow.set_input(wf, *patch)
+    assert _camera_files(models.walk_workflow_for_models(wf)) == expected
+
+    # ensure_models_for_mode walks the bare template, as tools/refresh_models.py does.
+    requested: set[str] = set()
+
+    def _record(filenames):
+        requested.update(filenames)
+        return iter(())
+
+    monkeypatch.setattr(models, "ensure_models", _record)
+    list(models.ensure_models_for_mode(mode))
+    assert _camera_files(requested) == expected
+    assert any("distilled-lora" in name for name in requested)
+
+
+def test_static_camera_lora_is_a_registered_lora():
+    entry = models.MODEL_REGISTRY[_STATIC_CAMERA]
+    assert entry.comfy_type == "loras"
+    assert entry.repo_id == "Lightricks/LTX-2-19b-LoRA-Camera-Control-Static"

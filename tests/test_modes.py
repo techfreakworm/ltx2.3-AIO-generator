@@ -1,5 +1,7 @@
 """Unit tests for modes.py — MODE_REGISTRY and parameterize_fn correctness."""
 
+import json
+
 import pytest
 
 import modes
@@ -130,3 +132,51 @@ def test_each_mode_has_required_attributes():
         assert mode.icon  # non-empty
         assert callable(mode.parameterize_fn)
         assert isinstance(mode.stage_map, list) and len(mode.stage_map) > 0
+
+
+_POWER_LORA = "Power Lora Loader (rgthree)"
+_HOLD_CAMERA_ROW = {
+    "on": True,
+    "lora": "ltx-2-19b-lora-camera-control-static.safetensors",
+    "strength": 0.5,
+}
+
+
+def _parameterised(mode_name, inputs):
+    """The workflow app._on_generate hands to backend.submit."""
+    wf = workflow.load_template(mode_name)
+    for patch in modes.MODE_REGISTRY[mode_name].parameterize_fn(inputs):
+        workflow.set_input(wf, *patch)
+    return wf
+
+
+def _enabled_lora_rows(wf):
+    return sorted(
+        (
+            row
+            for node in wf.values()
+            if node["class_type"] == _POWER_LORA
+            for row in node["inputs"].values()
+            if isinstance(row, dict) and "lora" in row and row.get("on")
+        ),
+        key=json.dumps,
+    )
+
+
+def test_lipsync_submits_the_distilled_row_and_the_static_camera_lora_only(canonical_inputs):
+    raw = json.loads((workflow.WORKFLOWS_DIR / "lipsync.json").read_text())
+    exported = [row for row in _enabled_lora_rows(raw) if "camera-control" not in row["lora"]]
+    assert [row["lora"] for row in exported] == [
+        "ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors"
+    ]
+
+    enabled = _enabled_lora_rows(_parameterised("lipsync", canonical_inputs["lipsync"]))
+
+    assert enabled == sorted(exported + [_HOLD_CAMERA_ROW], key=json.dumps)
+
+
+@pytest.mark.parametrize("mode_name", ["t2v", "i2v", "a2v", "keyframe", "style"])
+def test_other_modes_submit_no_camera_lora(mode_name, canonical_inputs):
+    enabled = _enabled_lora_rows(_parameterised(mode_name, canonical_inputs[mode_name]))
+    assert enabled, f"{mode_name}: no enabled LoRA rows at all"
+    assert [row["lora"] for row in enabled if "camera-control" in row["lora"]] == []

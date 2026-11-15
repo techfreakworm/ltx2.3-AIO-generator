@@ -174,15 +174,22 @@ def _is_camera_lora(row):
     return "camera-control" in str(row["lora"]).lower()
 
 
+_STATIC_CAMERA = "ltx-2-19b-lora-camera-control-static.safetensors"
+_HOLD_CAMERA_ROW = {"on": True, "lora": _STATIC_CAMERA, "strength": 0.5}
+_DISTILLED_ROW = {
+    "on": True,
+    "lora": "ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors",
+    "strength": 0.6,
+}
+
+
 @pytest.mark.parametrize("mode", workflow.VALID_MODES)
-def test_load_template_enables_no_camera_control_lora(mode):
-    """The UI's Camera control is not wired to the loader, so "none" must mean none."""
+def test_load_template_enables_no_camera_move_lora(mode):
+    """No dolly/jib row is ever on; lipsync alone holds the camera with the static LoRA."""
     rows = _lora_rows(workflow.load_template(mode))
     assert rows, f"{mode}: no Power Lora Loader rows found"
-    enabled = [
-        (nid, key, row["lora"]) for nid, key, row in rows if _is_camera_lora(row) and row["on"]
-    ]
-    assert enabled == []
+    enabled = [row for _nid, _key, row in rows if _is_camera_lora(row) and row["on"]]
+    assert enabled == ([_HOLD_CAMERA_ROW] if mode == "lipsync" else [])
 
 
 @pytest.mark.parametrize("mode", workflow.VALID_MODES)
@@ -191,7 +198,9 @@ def test_load_template_keeps_non_camera_lora_rows_as_exported(mode):
     raw = json.loads((workflow.WORKFLOWS_DIR / f"{mode}.json").read_text())
     raw_rows = {(nid, key): row for nid, key, row in _lora_rows(raw)}
     loaded_rows = {(nid, key): row for nid, key, row in _lora_rows(workflow.load_template(mode))}
-    assert loaded_rows.keys() == raw_rows.keys()
+    assert raw_rows.keys() <= loaded_rows.keys()
+    added = [loaded_rows[where] for where in loaded_rows.keys() - raw_rows.keys()]
+    assert added == ([_HOLD_CAMERA_ROW] if mode == "lipsync" else [])
 
     for where, raw_row in raw_rows.items():
         expected = dict(raw_row)
@@ -243,11 +252,69 @@ def test_load_template_switches_off_only_enabled_power_lora_camera_rows(tmp_path
             },
         },
     }
-    (tmp_path / "lipsync.json").write_text(json.dumps(template))
+    (tmp_path / "t2v.json").write_text(json.dumps(template))
     monkeypatch.setattr(workflow, "WORKFLOWS_DIR", tmp_path)
 
-    loaded = workflow.load_template("lipsync")
+    loaded = workflow.load_template("t2v")
 
     expected = json.loads(json.dumps(template))
     expected["7"]["inputs"]["lora_9"]["on"] = False
     assert loaded == expected
+
+
+def _write_lipsync_template(tmp_path, monkeypatch, template):
+    (tmp_path / "lipsync.json").write_text(json.dumps(template))
+    monkeypatch.setattr(workflow, "WORKFLOWS_DIR", tmp_path)
+
+
+def test_lipsync_hold_camera_row_never_overwrites_an_exported_row(tmp_path, monkeypatch):
+    """A re-export can renumber rows; the distilled row must survive whatever key it lands on."""
+    exported = {
+        "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
+        "lora_1": {
+            "on": True,
+            "lora": "ltx-2-19b-lora-camera-control-dolly-in.safetensors",
+            "strength": 1,
+        },
+        "lora_3": {"on": True, "lora": _STATIC_CAMERA, "strength": 1},
+        "lora_5": _DISTILLED_ROW,
+        "➕ Add Lora": "",
+        "model": ["43", 0],
+    }
+    template = {
+        "42": {"class_type": _POWER_LORA, "inputs": exported},
+        "43": {"class_type": "UNETLoader", "inputs": {"unet_name": "x.safetensors"}},
+    }
+    _write_lipsync_template(tmp_path, monkeypatch, template)
+
+    loaded = workflow.load_template("lipsync")
+
+    inputs = loaded["42"]["inputs"]
+    assert inputs["lora_5"] == _DISTILLED_ROW
+    assert inputs["lora_1"] == dict(exported["lora_1"], on=False)
+    assert inputs["lora_3"] == dict(exported["lora_3"], on=False)
+    added = set(inputs) - set(exported)
+    assert len(added) == 1 and inputs[added.pop()] == _HOLD_CAMERA_ROW
+    assert loaded["43"] == template["43"]
+    enabled = sorted((row for _n, _k, row in _lora_rows(loaded) if row["on"]), key=json.dumps)
+    assert enabled == sorted([_DISTILLED_ROW, _HOLD_CAMERA_ROW], key=json.dumps)
+
+    for _n, _k, row in _lora_rows(loaded):
+        row["strength"] = 9
+    reloaded = workflow.load_template("lipsync")
+    assert [row for _n, _k, row in _lora_rows(reloaded) if row["on"]].count(_HOLD_CAMERA_ROW) == 1
+
+
+@pytest.mark.parametrize("loader_count", [0, 2])
+def test_lipsync_refuses_to_guess_which_lora_loader_holds_the_camera(
+    tmp_path, monkeypatch, loader_count
+):
+    template = {
+        str(i): {"class_type": _POWER_LORA, "inputs": {"lora_1": dict(_DISTILLED_ROW)}}
+        for i in range(loader_count)
+    }
+    template["99"] = {"class_type": "UNETLoader", "inputs": {"unet_name": "x.safetensors"}}
+    _write_lipsync_template(tmp_path, monkeypatch, template)
+
+    with pytest.raises(ValueError, match="Power Lora Loader"):
+        workflow.load_template("lipsync")
