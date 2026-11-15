@@ -234,3 +234,64 @@ def test_keyframe_crop_link_is_a_fresh_list_per_call(canonical_inputs):
 def test_other_modes_patch_no_links(mode_name, canonical_inputs):
     patches = modes.MODE_REGISTRY[mode_name].parameterize_fn(canonical_inputs[mode_name])
     assert [(n, f, v) for n, f, v in patches if _is_link(v)] == []
+
+
+def _style_resolution_patches(inputs):
+    patches = modes.MODE_REGISTRY["style"].parameterize_fn(inputs)
+    return [(node_id, value) for node_id, field, value in patches if field == "resolution"]
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "expected"),
+    [(512, 768, 512), (1024, 576, 576), (384, 576, 384), (768.0, 1152.0, 768)],
+)
+def test_style_pose_resolution_is_the_shorter_side(width, height, expected, canonical_inputs):
+    """DWPreprocessor rescales so its short side equals `resolution`; the export froze 1024."""
+    pose = _only_node(workflow.load_template("style"), "DWPreprocessor")
+    inputs = dict(canonical_inputs["style"], width=width, height=height)
+
+    found = _style_resolution_patches(inputs)
+
+    assert found == [(pose, expected)]
+    # comfyui_controlnet_aux falls back to 512 for any resolution that is not exactly an int.
+    assert type(found[0][1]) is int
+
+
+def test_style_pose_resolution_follows_the_shared_size_defaults(canonical_inputs):
+    inputs = {k: v for k, v in canonical_inputs["style"].items() if k not in ("width", "height")}
+    patches = modes.MODE_REGISTRY["style"].parameterize_fn(inputs)
+    width = next(v for n, f, v in patches if (n, f) == (modes.NODE_WIDTH, "value"))
+    height = next(v for n, f, v in patches if (n, f) == (modes.NODE_HEIGHT, "value"))
+
+    assert [value for _node_id, value in _style_resolution_patches(inputs)] == [min(width, height)]
+
+
+def test_style_pose_node_id_names_a_dwpreprocessor():
+    template = workflow.load_template("style")
+    node_id = getattr(modes, "STYLE_NODE_POSE_PREPROCESSOR", None)
+    assert node_id in template, f"modes.STYLE_NODE_POSE_PREPROCESSOR = {node_id!r} is not a node"
+    assert template[node_id]["class_type"] == "DWPreprocessor"
+    assert "resolution" in template[node_id]["inputs"]
+
+
+def test_style_latent_size_comes_from_the_patched_pose_node(canonical_inputs):
+    """EmptyLTXVLatentVideo takes its size from the pose video, so the pose size is the output size."""
+    template = workflow.load_template("style")
+    latent = _only_node(template, "EmptyLTXVLatentVideo")
+    size_id = template[latent]["inputs"]["width"][0]
+    assert template[latent]["inputs"]["height"][0] == size_id
+    assert template[size_id]["class_type"] == "GetImageSize"
+    resize_id = template[size_id]["inputs"]["image"][0]
+    assert template[resize_id]["class_type"] == "ResizeImageMaskNode"
+    pose_id = template[resize_id]["inputs"]["input"][0]
+
+    assert pose_id == _only_node(template, "DWPreprocessor")
+    assert [node_id for node_id, _ in _style_resolution_patches(canonical_inputs["style"])] == [
+        pose_id
+    ]
+
+
+@pytest.mark.parametrize("mode_name", ["t2v", "i2v", "a2v", "lipsync", "keyframe"])
+def test_other_modes_patch_no_resolution(mode_name, canonical_inputs):
+    patches = modes.MODE_REGISTRY[mode_name].parameterize_fn(canonical_inputs[mode_name])
+    assert [(n, f) for n, f, _v in patches if f == "resolution"] == []

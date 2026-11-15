@@ -206,6 +206,7 @@ The user has explicitly said **don't change JSON** — when adding capabilities,
 
 **Wiring corrections to the export live in `parameterize_fn` (`modes.py`), where a re-export cannot undo them.**
 - Keyframe: the stage-2 upsampler reads `LTXVCropGuides` output 2, the latent with the guides removed. The export fed it the latent with both keyframe guides still appended, which came back as 16 extra frames starting with a ghost.
+- Style: the DWPose preprocessor's `resolution` is set to `min(width, height)` from the UI. The export froze it at 1024, and style takes its latent size from the pose video, so every run rendered with the short side at 1024 whatever the sliders said.
 
 ---
 

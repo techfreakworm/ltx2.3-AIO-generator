@@ -77,6 +77,12 @@ SEED_NODE_BY_MODE: dict[str, str] = {
 KEYFRAME_NODE_UPSAMPLER = "670:662"  # LTXVLatentUpsampler — inputs.samples
 KEYFRAME_NODE_CROP_GUIDES = "670:664"  # LTXVCropGuides — output 2 is the cropped latent
 
+# Style takes its latent size from the pose video, and DWPreprocessor rescales
+# its input so the short side equals `resolution`, which the export froze at
+# 1024. The input is already width x height, so the short side keeps it there.
+# The node pack ignores any resolution that is not exactly an int.
+STYLE_NODE_POSE_PREPROCESSOR = "5364:5344"  # DWPreprocessor — inputs.resolution
+
 
 def _seconds_for(frames: int, fps: int) -> int:
     """Inverse of `frames = seconds*fps + 1` from the master's MathExpression."""
@@ -135,6 +141,11 @@ def _style_parameterize(inp: dict[str, Any]) -> list[Patch]:
         (NODE_IMAGE_1, "image", inp["image"]),
         (NODE_VIDEO, "video", inp["input_video"]),
         (NODE_VIDEO, "skip_first_frames", 0),
+        (
+            STYLE_NODE_POSE_PREPROCESSOR,
+            "resolution",
+            min(int(inp.get("width", 512)), int(inp.get("height", 768))),
+        ),
     ]
 
 
