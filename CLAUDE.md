@@ -204,6 +204,9 @@ The user has explicitly said **don't change JSON** — when adding capabilities,
 - Lipsync then holds the camera with `ltx-2-19b-lora-camera-control-static.safetensors` at strength 0.5, added under its own `lora_hold_camera` key by `_hold_camera`. Without it nothing pins the camera, and on a smaller head the mouth stops moving. At 1.0 the person walks toward the camera on some seeds.
 - Every model-set computation goes through `load_template`, so downloads follow automatically. To give users camera moves, wire the UI Camera control through `parameterize_fn`; do not re-enable a row in the export.
 
+**Wiring corrections to the export live in `parameterize_fn` (`modes.py`), where a re-export cannot undo them.**
+- Keyframe: the stage-2 upsampler reads `LTXVCropGuides` output 2, the latent with the guides removed. The export fed it the latent with both keyframe guides still appended, which came back as 16 extra frames starting with a ghost.
+
 ---
 
 ## Common pitfalls (read before opening a PR)

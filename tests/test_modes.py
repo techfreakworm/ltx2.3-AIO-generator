@@ -20,12 +20,12 @@ def _is_link(value):
 
 
 def _assert_patches_apply_to_template(mode_name, patches):
-    """Every patch must hit an existing literal input of a node in the real template."""
+    """Every patch must hit an existing input; literals stay literals, links stay links."""
     assert len(patches) > 0
     wf = workflow.load_template(mode_name)
     node_count = len(wf)
 
-    for node_id, field, _value in patches:
+    for node_id, field, value in patches:
         assert isinstance(node_id, str), f"node id {node_id!r} is not a str"
         assert isinstance(field, str), f"field {field!r} is not a str"
         assert node_id in wf, f"{mode_name}: patch targets missing node {node_id!r}"
@@ -33,9 +33,11 @@ def _assert_patches_apply_to_template(mode_name, patches):
         class_type = wf[node_id]["class_type"]
         # set_input creates unknown fields silently, so a misspelt field would go unnoticed.
         assert field in inputs, f"{mode_name}: {class_type} {node_id!r} has no input {field!r}"
-        assert not _is_link(inputs[field]), (
-            f"{mode_name}: patch would cut the graph link at {node_id!r}.{field}"
-        )
+        if _is_link(inputs[field]) or _is_link(value):
+            assert _is_link(inputs[field]) and _is_link(value), (
+                f"{mode_name}: patch at {node_id!r}.{field} swaps a link for a literal or back"
+            )
+            assert value[0] in wf, f"{mode_name}: {node_id!r}.{field} re-wired to missing node"
 
     for patch in patches:
         workflow.set_input(wf, *patch)
@@ -180,3 +182,55 @@ def test_other_modes_submit_no_camera_lora(mode_name, canonical_inputs):
     enabled = _enabled_lora_rows(_parameterised(mode_name, canonical_inputs[mode_name]))
     assert enabled, f"{mode_name}: no enabled LoRA rows at all"
     assert [row["lora"] for row in enabled if "camera-control" in row["lora"]] == []
+
+
+def _only_node(wf, class_type):
+    ids = [node_id for node_id, node in wf.items() if node["class_type"] == class_type]
+    assert len(ids) == 1, f"expected one {class_type}, found {ids}"
+    return ids[0]
+
+
+def test_keyframe_upsamples_the_latent_with_the_guide_frames_cropped(canonical_inputs):
+    """LTXVAddGuideMulti appends both keyframes as latents; stage 2 must not upscale them as video."""
+    template = workflow.load_template("keyframe")
+    crop = _only_node(template, "LTXVCropGuides")
+    upsampler = _only_node(template, "LTXVLatentUpsampler")
+    uncropped = template[upsampler]["inputs"]["samples"]
+    assert template[crop]["inputs"]["latent"] == uncropped
+
+    wf = _parameterised("keyframe", canonical_inputs["keyframe"])
+
+    assert wf[upsampler]["inputs"]["samples"] == [crop, 2]
+    assert wf[crop]["inputs"]["latent"] == uncropped
+
+
+def test_keyframe_crop_node_ids_name_those_node_types():
+    """A re-export that renumbers these nodes must fail here, not on the Space."""
+    template = workflow.load_template("keyframe")
+    expected = {
+        "KEYFRAME_NODE_UPSAMPLER": "LTXVLatentUpsampler",
+        "KEYFRAME_NODE_CROP_GUIDES": "LTXVCropGuides",
+    }
+    for name, class_type in expected.items():
+        node_id = getattr(modes, name, None)
+        assert node_id in template, f"modes.{name} = {node_id!r} is not a keyframe node"
+        assert template[node_id]["class_type"] == class_type
+
+
+def test_keyframe_crop_link_is_a_fresh_list_per_call(canonical_inputs):
+    def samples_links():
+        patches = modes.MODE_REGISTRY["keyframe"].parameterize_fn(canonical_inputs["keyframe"])
+        return [value for _node_id, field, value in patches if field == "samples"]
+
+    first = samples_links()
+    assert len(first) == 1
+    original = list(first[0])
+    first[0].append("mutated")
+
+    assert samples_links() == [original]
+
+
+@pytest.mark.parametrize("mode_name", ["t2v", "i2v", "a2v", "lipsync", "style"])
+def test_other_modes_patch_no_links(mode_name, canonical_inputs):
+    patches = modes.MODE_REGISTRY[mode_name].parameterize_fn(canonical_inputs[mode_name])
+    assert [(n, f, v) for n, f, v in patches if _is_link(v)] == []

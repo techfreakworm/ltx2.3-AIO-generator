@@ -70,6 +70,13 @@ SEED_NODE_BY_MODE: dict[str, str] = {
     "style": "5364:5545",
 }
 
+# Keyframe's LTXVAddGuideMulti appends both keyframes to the stage-1 latent. The
+# export feeds the stage-2 upsampler that uncropped latent, so the two guide
+# latents were decoded as 16 extra frames, the first a ghost. Output slot 2 of
+# LTXVCropGuides is the same latent with the guides removed.
+KEYFRAME_NODE_UPSAMPLER = "670:662"  # LTXVLatentUpsampler — inputs.samples
+KEYFRAME_NODE_CROP_GUIDES = "670:664"  # LTXVCropGuides — output 2 is the cropped latent
+
 
 def _seconds_for(frames: int, fps: int) -> int:
     """Inverse of `frames = seconds*fps + 1` from the master's MathExpression."""
@@ -119,6 +126,7 @@ def _keyframe_parameterize(inp: dict[str, Any]) -> list[Patch]:
     return _shared_patches(inp, "keyframe") + [
         (NODE_IMAGE_1, "image", inp["first_frame"]),
         (NODE_IMAGE_2, "image", inp["last_frame"]),
+        (KEYFRAME_NODE_UPSAMPLER, "samples", [KEYFRAME_NODE_CROP_GUIDES, 2]),
     ]
 
 
